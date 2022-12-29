@@ -6,22 +6,15 @@ import {
     Field,
     FieldDescriptor,
     FieldType,
-    defaultPopulator, FieldDescriptors,
+    defaultPopulator,
     TypedField
 } from '../dataset'
-import {first} from "rxjs";
 
 const EMPTY_STRING = "";
 const BOB = "BOB";
 const MARY = "MARY";
 
 const FIELD_NAME_1 = "FieldName1";
-const FIELD_NAME_2 = "FieldName2";
-const FIELD_NAME_3 = "FieldName3";
-
-const FIELD_OBSERVER_ID1 = "ID1";
-const FIELD_OBSERVER_ID2 = "ID2";
-const FIELD_OBSERVER_ID3 = "ID3";
 
 
 class Observer<SourceType, DetailType> {
@@ -29,7 +22,7 @@ class Observer<SourceType, DetailType> {
     public detail: DetailType;
     public id: string;
     public source: SourceType;
-    public count: number = 0;
+    public count = 0;
 
     private theObserver: (v: DatasetEvent<SourceType, DetailType>) => void = (v: DatasetEvent<SourceType, DetailType>) => {
 
@@ -92,17 +85,17 @@ test('Test subscribed field observers', () => {
 
 test('Test DatasetRow with Field Descriptor array', () => {
 
-    let fieldTypes = {
+    const fieldTypes = {
         "name": FieldType.STRING,
         "age": FieldType.INTEGER
     }
 
 
-    let nameFieldD: FieldDescriptor = new DefaultFieldDescriptor("name", FieldType.STRING);
-    let ageFieldD: FieldDescriptor = new DefaultFieldDescriptor("age", FieldType.INTEGER);
+    const nameFieldD: FieldDescriptor = new DefaultFieldDescriptor("name", FieldType.STRING);
+    const ageFieldD: FieldDescriptor = new DefaultFieldDescriptor("age", FieldType.INTEGER);
 
 
-    let row: DatasetRow = new DatasetRow([nameFieldD, ageFieldD]);
+    const row: DatasetRow = new DatasetRow([nameFieldD, ageFieldD]);
 
     doDatarowTest(row);
 
@@ -110,7 +103,7 @@ test('Test DatasetRow with Field Descriptor array', () => {
 
 test('Test DatasetRow', () => {
 
-    let row: DatasetRow = new DatasetRow();
+    const row: DatasetRow = new DatasetRow();
 
     row.addColumn("name", FieldType.STRING);
     row.addColumn("age", FieldType.INTEGER);
@@ -121,9 +114,9 @@ test('Test DatasetRow', () => {
 
 test('Test type hash of datasetrow', () => {
 
-    let row1 = new DatasetRow();
-    let row2 = new DatasetRow();
-    let row3 = new DatasetRow();
+    const row1 = new DatasetRow();
+    const row2 = new DatasetRow();
+    const row3 = new DatasetRow();
 
     row1.addColumn("name", FieldType.STRING);
     row1.addColumn("age", FieldType.INTEGER);
@@ -144,9 +137,9 @@ test('Test type hash of datasetrow', () => {
 
 test('Dataset Test', () => {
 
-    let theObserver = new Observer<Dataset, DatasetRow>();
+    const theObserver = new Observer<Dataset, DatasetRow>();
 
-    let columnTypes = [
+    const columnTypes = [
         {
             name: "name",
             type: FieldType.STRING
@@ -157,7 +150,7 @@ test('Dataset Test', () => {
         }
     ];
 
-    let dataSet: Dataset = new Dataset(columnTypes);
+    const dataSet: Dataset = new Dataset(columnTypes);
 
     dataSet.subscribe(theObserver.observer);
 
@@ -171,7 +164,7 @@ test('Dataset Test', () => {
     dataSet.addRow();
     expect(dataSet.rowCount).toBe(3);
 
-    let rowIds = dataSet.getRowIds();
+    const rowIds = dataSet.getRowIds();
 
     expect(rowIds.length).toBe(3);
 
@@ -184,20 +177,20 @@ test('Dataset Test', () => {
         tempRow = row;
     }
 
-    expect(dataSet.rows.length).toBe(3);
+    expect(dataSet.rowCount).toBe(3);
 
 });
 
 test('Populate dataset test', () => {
 
-    let theObserver = new Observer<Dataset, DatasetRow>();
+    const theObserver = new Observer<Dataset, DatasetRow>();
 
-    let columnTypes = [
+    const columnTypes = [
         { name: "name", type: FieldType.STRING },
         { name: "age",  type: FieldType.INTEGER }
     ];
 
-    let dataSet: Dataset = new Dataset(columnTypes);
+    const dataSet: Dataset = new Dataset(columnTypes);
     dataSet.subscribe(theObserver.observer);
 
     expect(theObserver.count).toBe(0);
@@ -209,17 +202,15 @@ test('Populate dataset test', () => {
         { name: "Helen", age: "75" }
     ]
 
-    let mp : {  name : string, age : string }[] = p; //JSON.parse(JSON.stringify(p));
-
-    dataSet.populate(defaultPopulator< { name: string, age : string } >(mp));
+    dataSet.populate(defaultPopulator(p));
 
     expect(dataSet.rowCount).toBe(4);
     expect(theObserver.count).toBe(4);
 
-    let firstRow = dataSet.getRow(dataSet.getRowIds()[0]);
+    const firstRow = dataSet.getRow(dataSet.getRowIds()[0]);
     expect(firstRow != null && firstRow != undefined).toBe(true);
 
-    let field = firstRow.getField("age");
+    const field = firstRow.getField("age");
     expect(field != null && field != undefined).toBe(true);
 
     expect(firstRow.getValue("age")).toBe("51");
@@ -228,11 +219,36 @@ test('Populate dataset test', () => {
     expect(firstRow.getValue("age")).toBe("52");
     expect(theObserver.count).toBe(5);
 
+    console.log("TESTING ITERATOR 8888888888888888888888888888888888");
+    let index = 0;
+    for (let itr of dataSet.iterator()){
+        expect(itr.getValue("name")).toBe(p[index++].name);
+    }
+
+    index = 0;
+    let navigator = dataSet.navigator();
+    for (let itr of navigator){
+        expect(itr.getValue("name")).toBe(p[index++].name);
+    }
+
+
+
+
+    let aRow = navigator.first().value;
+
+    expect(aRow.getValue("name")).toBe("Gerry");
+    aRow = navigator.current().value;
+    expect(aRow.getValue("name")).toBe("Gerry");
+
+    aRow = navigator.next().value;
+    expect(aRow.getValue("name")).toBe("Deborah");
+
+
 })
 
 
 function doDatarowTest(row: DatasetRow) {
-    let theObserver = new Observer<DatasetRow, Field>();
+    const theObserver = new Observer<DatasetRow, Field>();
 
     row.subscribe(theObserver.observer);
 
@@ -261,7 +277,7 @@ function doDatarowTest(row: DatasetRow) {
 
     let count = 0;
 
-    let iterator: IterableIterator<TypedField> = row.entries();
+    const iterator: IterableIterator<TypedField> = row.entries();
     for (let field of iterator) {
 
         switch (count) {
