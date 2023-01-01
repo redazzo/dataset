@@ -259,9 +259,13 @@ class DatasetRowNavigator implements NavigableIterator<DatasetRow> {
         return this.theCurrentRow.setFieldValue(fieldName, value);
     }
 
+    subscribe(observer: (v: DatasetEvent<DataRow, Field>) => void): Subscription {
+        return this.theCurrentRow.subscribe(observer);
+    }
+
 }
 
-export interface NavigableIterator<T> extends IterableIterator<T> {
+export interface NavigableIterator<T> extends IterableIterator<T>, DataRow {
 
     first() : IteratorResult<T, any>
     prior() : IteratorResult<T, any>
