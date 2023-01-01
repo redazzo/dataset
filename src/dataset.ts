@@ -17,6 +17,7 @@ export interface Field extends FieldDescriptor {
 
     get id(): string
     get value(): string
+    subscribe( observer : (e: DatasetEvent<Field, Field>) => void ) : Subscription
 }
 
 export class DefaultFieldDescriptor implements FieldDescriptor {
@@ -67,8 +68,20 @@ export class TypedField implements Field {
 
 }
 
+export interface DataRow {
 
-export class DatasetRow {
+    getField(fieldName: string): Field
+
+    getValue(fieldName: string) : string
+
+    setFieldValue(fieldName: string, value: string) : void
+
+    subscribe( observer : (v: DatasetEvent<DataRow, Field | DataRow>) => void ) : Subscription
+
+}
+
+
+export class DatasetRow implements DataRow {
 
     private readonly subject : Subject<DatasetEvent<DatasetRow, Field>> = new Subject<DatasetEvent<DatasetRow, Field>>();
     private fieldDescriptors: Map<string, FieldDescriptor> = new Map<string, FieldDescriptor>();
@@ -144,7 +157,7 @@ export class DatasetRow {
         this.fieldDescriptors.set(fieldDescription.name, fieldDescription);
     }
 
-    public subscribe( observer : (v: DatasetEvent<DatasetRow, TypedField>) => void ) : Subscription {
+    public subscribe( observer : (v: DatasetEvent<DatasetRow, Field>) => void ) : Subscription {
         return this.subject.subscribe(observer);
     }
 
@@ -160,22 +173,22 @@ export class DatasetRow {
 
 class DatasetRowNavigator implements NavigableIterator<DatasetRow> {
 
-    private index : number = 0;
+    private index : number = -1;
     private readonly maxSize: number;
     private theCurrentRow : DatasetRow;
 
-    constructor(private readonly datasetRows : Map<number, DatasetRow>) {
+    public constructor(private readonly datasetRows : Map<number, DatasetRow>) {
         this.maxSize = datasetRows.size;
         if (datasetRows.size > 0){
             this.theCurrentRow = datasetRows.get(0);
         }
     }
 
-    [Symbol.iterator](): IterableIterator<DatasetRow> {
+    public [Symbol.iterator](): IterableIterator<DatasetRow> {
         return this;
     }
 
-    first() : IteratorResult<DatasetRow, any> {
+    public first() : IteratorResult<DatasetRow, any> {
         if (this.datasetRows.size > 0){
             this.index = 0;
             this.theCurrentRow = this.datasetRows.get(this.index);
@@ -188,31 +201,39 @@ class DatasetRowNavigator implements NavigableIterator<DatasetRow> {
         }
     }
 
-    prior() : IteratorResult<DatasetRow> {
+    public prior() : IteratorResult<DatasetRow> {
         if (this.index > 0){
             this.index--;
-        }
-
-        this.theCurrentRow = this.datasetRows.get(this.index);
-
-        return {
-            value: this.theCurrentRow
-        }
-    }
-
-    current() : IteratorResult<DatasetRow> {
-        return {
-            value: this.theCurrentRow
-        }
-    }
-    
-    
-
-    next(...args: [] | [undefined]): IteratorResult<DatasetRow, any> {
-        if (this.index < this.maxSize) {
-
             this.theCurrentRow = this.datasetRows.get(this.index);
+
+            return {
+                value: this.theCurrentRow
+            }
+
+        }
+
+        return {
+            value: undefined,
+            done: true
+        }
+
+
+    }
+
+    public current() : IteratorResult<DatasetRow> {
+        return {
+            value: this.theCurrentRow
+        }
+    }
+    
+    
+
+    public next(...args: [] | [undefined]): IteratorResult<DatasetRow, any> {
+
+        if (this.index < this.maxSize - 1) {
+
             this.index++;
+            this.theCurrentRow = this.datasetRows.get(this.index);
 
             return {
                 value: this.theCurrentRow
@@ -226,6 +247,18 @@ class DatasetRowNavigator implements NavigableIterator<DatasetRow> {
         }
     }
 
+    public getField(fieldName: string): Field {
+        return this.theCurrentRow.getField(fieldName);
+    }
+
+    public getValue(fieldName: string) : string {
+        return this.theCurrentRow.getValue(fieldName);
+    }
+
+    public setFieldValue(fieldName: string, value: string) : void {
+        return this.theCurrentRow.setFieldValue(fieldName, value);
+    }
+
 }
 
 export interface NavigableIterator<T> extends IterableIterator<T> {
@@ -236,17 +269,15 @@ export interface NavigableIterator<T> extends IterableIterator<T> {
 
 }
 
-export class Dataset {
+export class Dataset implements DataRow {
 
     private readonly subject : Subject<DatasetEvent<Dataset, DatasetRow>> = new Subject<DatasetEvent<Dataset, DatasetRow>>();
     private readonly theFieldDescriptors: Map<string, FieldDescriptor> = new Map<string, FieldDescriptor>();
     private theRows: Map<number, DatasetRow> = new Map<number, DatasetRow>();
     private readonly datasetId: string;
     private readonly typeHash : number;
-    private noRows = 0;
-    private currentRow : DatasetRow = null;
 
-    private theNavigator = new DatasetRowNavigator(this.theRows);
+    private theNavigator : DatasetRowNavigator = null;
 
 
 
@@ -265,18 +296,14 @@ export class Dataset {
 
         if (rows != null){
 
+            let noRows = 0;
             for (let row of rows){
-
-                // Always point to the first row first.
-                if (this.currentRow == null) {
-                    this.currentRow = row;
-                }
 
                 if (row.typeHash != this.typeHash){
                     throw new Error("Rows in a dataset must have identical fields and field types.");
                 }
 
-                this.theRows.set(this.noRows++, row);
+                this.theRows.set(noRows++, row);
             }
         }
     }
@@ -286,6 +313,10 @@ export class Dataset {
     }
 
     public navigator() : NavigableIterator<DatasetRow> {
+
+        if (this.theNavigator == null){
+            this.theNavigator = new DatasetRowNavigator(this.theRows);
+        }
         return this.theNavigator;
     }
 
@@ -303,15 +334,18 @@ export class Dataset {
     }
 
     public getField(fieldName: string): TypedField {
-        return null;
+        let currentRow = this.navigator().current().value;
+        return currentRow.getField(fieldName);
     }
 
     public getValue(fieldName: string) : string {
-        return null;
+        let currentRow = this.navigator().current().value;
+        return currentRow.getValue(fieldName);
     }
 
     public setFieldValue(fieldName: string, value: string) : void {
-
+        let currentRow = this.navigator().current().value;
+        currentRow.setFieldValue(fieldName, value);
     }
 
     /**
@@ -346,12 +380,6 @@ export class Dataset {
 
         }
         return null;
-    }
-
-    public get rows() : Iterator<DatasetRow> {
-
-        return this.theRows.values();
-
     }
 
     public getRowIds() : string[] {
@@ -390,16 +418,16 @@ export class Dataset {
             datasetThis.subject.next(new DatasetEvent<Dataset, DatasetRow>(datasetThis.datasetId, row, datasetThis));
         });
 
-        this.theRows.set(this.noRows, row);
-        this.noRows++;
+        let noRows = this.theRows.size
+        this.theRows.set(noRows, row);
         this.subject.next(new DatasetEvent<Dataset, DatasetRow>(this.datasetId, row, this));
     }
 
     get rowCount(): number {
-        return this.noRows;
+        return this.theRows.size;
     }
 
-    public subscribe( observer : (v: DatasetEvent<Dataset, DatasetRow>) => void ) : Subscription {
+    public subscribe( observer : (v: DatasetEvent<Dataset, DataRow>) => void ) : Subscription {
         return this.subject.subscribe(observer);
     }
 

@@ -16,6 +16,12 @@ const MARY = "MARY";
 
 const FIELD_NAME_1 = "FieldName1";
 
+const NAME_1 = "Bob";
+const NAME_2 = "Jerry";
+const NAME_3 = "Jane";
+const NAME_4 = "Tom";
+
+
 
 class Observer<SourceType, DetailType> {
 
@@ -64,8 +70,6 @@ test('Test subscribed field observers', () => {
     const subscription2 = field.subscribe(testObserver2.observer);
 
     field.value = BOB;
-
-    //console.log("xxx:" + testObserver1.fieldName)
 
     expect(testObserver1.source.name).toBe(FIELD_NAME_1);
     expect(testObserver2.source.name).toBe(FIELD_NAME_1);
@@ -181,28 +185,11 @@ test('Dataset Test', () => {
 
 });
 
+
+
 test('Populate dataset test', () => {
 
-    const theObserver = new Observer<Dataset, DatasetRow>();
-
-    const columnTypes = [
-        { name: "name", type: FieldType.STRING },
-        { name: "age",  type: FieldType.INTEGER }
-    ];
-
-    const dataSet: Dataset = new Dataset(columnTypes);
-    dataSet.subscribe(theObserver.observer);
-
-    expect(theObserver.count).toBe(0);
-
-    let p = [
-        { name: "Gerry", age: "51" },
-        { name: "Deborah", age: "50"},
-        { name: "Joshua", age: "12"},
-        { name: "Helen", age: "75" }
-    ]
-
-    dataSet.populate(defaultPopulator(p));
+    let {theObserver, dataSet} = populateDataset();
 
     expect(dataSet.rowCount).toBe(4);
     expect(theObserver.count).toBe(4);
@@ -219,7 +206,13 @@ test('Populate dataset test', () => {
     expect(firstRow.getValue("age")).toBe("52");
     expect(theObserver.count).toBe(5);
 
-    console.log("TESTING ITERATOR 8888888888888888888888888888888888");
+
+})
+
+test('Test iterator and navigator', () => {
+
+    let {dataSet, p} = populateDataset();
+
     let index = 0;
     for (let itr of dataSet.iterator()){
         expect(itr.getValue("name")).toBe(p[index++].name);
@@ -231,20 +224,64 @@ test('Populate dataset test', () => {
         expect(itr.getValue("name")).toBe(p[index++].name);
     }
 
-
-
-
     let aRow = navigator.first().value;
 
-    expect(aRow.getValue("name")).toBe("Gerry");
+    expect(aRow.getValue("name")).toBe(NAME_1);
     aRow = navigator.current().value;
-    expect(aRow.getValue("name")).toBe("Gerry");
+    expect(aRow.getValue("name")).toBe(NAME_1);
 
     aRow = navigator.next().value;
-    expect(aRow.getValue("name")).toBe("Deborah");
+
+    expect(aRow.getValue("name")).toBe(NAME_2);
+
+    aRow = navigator.prior().value;
+    expect(aRow.getValue("name")).toBe(NAME_1);
+
+    let result = navigator.prior();
+    expect(result.done).toBe(true);
+    expect(result.value).toBe(undefined);
+
+    result = navigator.prior();
+    expect(result.done).toBe(true);
+    expect(result.value).toBe(undefined);
+
+    result = navigator.first();
+    expect(aRow.getValue("name")).toBe(NAME_1);
+    aRow = navigator.current().value;
+    expect(aRow.getValue("name")).toBe(NAME_1);
+
+
+    index = 1;
+    for (let itr of navigator){
+        expect(itr.getValue("name")).toBe(p[index++].name);
+    }
 
 
 })
+
+function populateDataset() {
+    const theObserver = new Observer<Dataset, DatasetRow>();
+
+    const columnTypes = [
+        {name: "name", type: FieldType.STRING},
+        {name: "age", type: FieldType.INTEGER}
+    ];
+
+    const dataSet: Dataset = new Dataset(columnTypes);
+    dataSet.subscribe(theObserver.observer);
+
+    expect(theObserver.count).toBe(0);
+
+    let p = [
+        {name: NAME_1, age: "51"},
+        {name: NAME_2, age: "50"},
+        {name: NAME_3, age: "12"},
+        {name: NAME_4, age: "75"}
+    ]
+
+    dataSet.populate(defaultPopulator(p));
+    return {theObserver, dataSet, p};
+}
 
 
 function doDatarowTest(row: DatasetRow) {
