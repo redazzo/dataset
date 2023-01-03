@@ -279,7 +279,7 @@ function populateDataset() {
         {name: NAME_4, age: "75"}
     ]
 
-    dataSet.populate(defaultPopulator(p));
+    dataSet.load(defaultPopulator(p));
     return {theObserver, dataSet, p};
 }
 
