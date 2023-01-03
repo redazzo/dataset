@@ -88,23 +88,38 @@ export class DatasetRow implements DataRow {
     private datasetFieldMap: Map<string, TypedField> = new Map<string, TypedField>();
     public readonly id: string;
 
-
     constructor(fieldDescriptors? : FieldDescriptor[] ) {
         this.id = uuidv4();
 
         if (fieldDescriptors != null) {
             fieldDescriptors.forEach(value => {
                 this.addFieldDescriptor(value);
+                this.addField(value);
             });
-
         }
+    }
 
+    private addField(value: FieldDescriptor) : TypedField {
 
+        let thisRow = this;
+        let tf = new TypedField(value.name, "", value.type);
+
+        // Make the row an observer of the field, and fire an event if the field value changes.
+        tf.subscribe((v: DatasetEvent<Field, Field>) => {
+
+            thisRow.subject.next(
+                new DatasetEvent<DatasetRow, Field>(thisRow.id, v.detail, thisRow)
+            );
+        });
+
+        this.datasetFieldMap.set(value.name, tf);
+        return tf;
     }
 
     public addColumn(fieldName : string, type : FieldType){
         let fieldDescriptor = new DefaultFieldDescriptor(fieldName, type);
         this.addFieldDescriptor(fieldDescriptor);
+        this.addField(fieldDescriptor);
     }
 
     public getField(fieldName: string): TypedField {
@@ -117,31 +132,17 @@ export class DatasetRow implements DataRow {
 
     public setFieldValue(fieldName: string, value: string) : void {
 
-        let thisRow = this;
-
         let tf : TypedField = this.datasetFieldMap.get(fieldName);
 
         if ( tf == null || tf == undefined) {
 
             let fieldDescriptor = this.fieldDescriptors.get(fieldName);
 
-            if (fieldDescriptor != null) {
-
-                tf = new TypedField(fieldName, value, fieldDescriptor.type);
-
-                // Make the row an observer of the field, and fire an event if the field value changes.
-                tf.subscribe(  (v: DatasetEvent<Field, Field>) => {
-
-                    thisRow.subject.next(
-
-                        new DatasetEvent<DatasetRow, Field>(thisRow.id, v.detail, thisRow)
-                    );
-                });
-
-                this.datasetFieldMap.set(fieldName, tf);
-
-            } else {
+            if (fieldDescriptor == null) {
                 throw new Error("No such field.");
+            } else {
+
+                tf = this.addField(fieldDescriptor);
             }
         }
 
