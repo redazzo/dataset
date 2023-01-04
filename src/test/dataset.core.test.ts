@@ -6,7 +6,7 @@ import {
     Field,
     FieldDescriptor,
     FieldType,
-    defaultPopulator,
+    defaultDataPump,
     TypedField
 } from '../dataset'
 
@@ -14,12 +14,18 @@ const EMPTY_STRING = "";
 const BOB = "BOB";
 const MARY = "MARY";
 
-const FIELD_NAME_1 = "FieldName1";
+const NAME1 = BOB;
+const NAME2 = "Jerry";
+const NAME3 = "Jane";
+const NAME4 = "Tom";
 
-const NAME_1 = "Bob";
-const NAME_2 = "Jerry";
-const NAME_3 = "Jane";
-const NAME_4 = "Tom";
+const AGE1 = "51";
+const AGE2 = "50";
+const AGE3 = "12";
+const AGE4 = "75";
+
+const FIELDNAME1 ="name";
+const FIELDNAME2 = "age";
 
 
 
@@ -45,9 +51,9 @@ class Observer<SourceType, DetailType> {
 
 test('Dataset value is updated', () => {
 
-    const field = new TypedField(FIELD_NAME_1, EMPTY_STRING, FieldType.STRING);
+    const field = new TypedField(FIELDNAME1, EMPTY_STRING, FieldType.STRING);
 
-    expect(field.name).toBe(FIELD_NAME_1);
+    expect(field.name).toBe(FIELDNAME1);
     expect(field.value).toBe(EMPTY_STRING);
 
     field.value = BOB;
@@ -60,7 +66,7 @@ test('Dataset value is updated', () => {
 
 test('Test subscribed field observers', () => {
 
-    const field = new TypedField(FIELD_NAME_1, EMPTY_STRING, FieldType.STRING);
+    const field = new TypedField(FIELDNAME1, EMPTY_STRING, FieldType.STRING);
 
     const testObserver1 = new Observer<Field, Field>();
     const testObserver2 = new Observer<Field, Field>();
@@ -71,16 +77,16 @@ test('Test subscribed field observers', () => {
 
     field.value = BOB;
 
-    expect(testObserver1.source.name).toBe(FIELD_NAME_1);
-    expect(testObserver2.source.name).toBe(FIELD_NAME_1);
+    expect(testObserver1.source.name).toBe(FIELDNAME1);
+    expect(testObserver2.source.name).toBe(FIELDNAME1);
     expect(testObserver1.source.value).toBe(BOB);
     expect(testObserver2.source.value).toBe(BOB);
 
     subscription2.unsubscribe();
     field.value = MARY;
 
-    expect(testObserver1.source.name).toBe(FIELD_NAME_1);
-    expect(testObserver2.source.name).toBe(FIELD_NAME_1);
+    expect(testObserver1.source.name).toBe(FIELDNAME1);
+    expect(testObserver2.source.name).toBe(FIELDNAME1);
     expect(testObserver1.count).toBe(2);
     expect(testObserver2.count).toBe(1);
 
@@ -90,13 +96,13 @@ test('Test subscribed field observers', () => {
 test('Test DatasetRow with Field Descriptor array', () => {
 
     const fieldTypes = {
-        "name": FieldType.STRING,
-        "age": FieldType.INTEGER
+        FIELDNAME1: FieldType.STRING,
+        FIELDNAME2: FieldType.INTEGER
     }
 
 
-    const nameFieldD: FieldDescriptor = new DefaultFieldDescriptor("name", FieldType.STRING);
-    const ageFieldD: FieldDescriptor = new DefaultFieldDescriptor("age", FieldType.INTEGER);
+    const nameFieldD: FieldDescriptor = new DefaultFieldDescriptor(FIELDNAME1, FieldType.STRING);
+    const ageFieldD: FieldDescriptor = new DefaultFieldDescriptor(FIELDNAME2, FieldType.INTEGER);
 
 
     const row: DatasetRow = new DatasetRow([nameFieldD, ageFieldD]);
@@ -109,8 +115,8 @@ test('Test DatasetRow', () => {
 
     const row: DatasetRow = new DatasetRow();
 
-    row.addColumn("name", FieldType.STRING);
-    row.addColumn("age", FieldType.INTEGER);
+    row.addColumn(FIELDNAME1, FieldType.STRING);
+    row.addColumn(FIELDNAME2, FieldType.INTEGER);
 
     doDatarowTest(row);
 
@@ -122,16 +128,16 @@ test('Test type hash of datasetrow', () => {
     const row2 = new DatasetRow();
     const row3 = new DatasetRow();
 
-    row1.addColumn("name", FieldType.STRING);
-    row1.addColumn("age", FieldType.INTEGER);
+    row1.addColumn(FIELDNAME1, FieldType.STRING);
+    row1.addColumn(FIELDNAME2, FieldType.INTEGER);
     row1.addColumn("eyecolour", FieldType.STRING);
 
-    row2.addColumn("name", FieldType.STRING);
-    row2.addColumn("age", FieldType.INTEGER);
+    row2.addColumn(FIELDNAME1, FieldType.STRING);
+    row2.addColumn(FIELDNAME2, FieldType.INTEGER);
     row2.addColumn("eyecolour", FieldType.STRING);
 
-    row3.addColumn("name", FieldType.STRING);
-    row3.addColumn("age", FieldType.INTEGER);
+    row3.addColumn(FIELDNAME1, FieldType.STRING);
+    row3.addColumn(FIELDNAME2, FieldType.INTEGER);
     //row3.addColumn("eyec_colour", FieldType.STRING);
 
     expect(row1.typeHash == row2.typeHash).toBe(true);
@@ -145,11 +151,11 @@ test('Dataset Test', () => {
 
     const columnTypes = [
         {
-            name: "name",
+            name: FIELDNAME1,
             type: FieldType.STRING
         },
         {
-            name: "age",
+            name: FIELDNAME2,
             type: FieldType.INTEGER
         }
     ];
@@ -197,13 +203,13 @@ test('Populate dataset test', () => {
     const firstRow = dataSet.getRow(dataSet.getRowIds()[0]);
     expect(firstRow != null && firstRow != undefined).toBe(true);
 
-    const field = firstRow.getField("age");
+    const field = firstRow.getField(FIELDNAME2);
     expect(field != null && field != undefined).toBe(true);
 
-    expect(firstRow.getValue("age")).toBe("51");
+    expect(firstRow.getValue(FIELDNAME2)).toBe(AGE1);
 
-    firstRow.setFieldValue("age", "52");
-    expect(firstRow.getValue("age")).toBe("52");
+    firstRow.setFieldValue(FIELDNAME2, "52");
+    expect(firstRow.getValue(FIELDNAME2)).toBe("52");
     expect(theObserver.count).toBe(5);
 
 
@@ -215,27 +221,27 @@ test('Test iterator and navigator', () => {
 
     let index = 0;
     for (let itr of dataSet.iterator()){
-        expect(itr.getValue("name")).toBe(p[index++].name);
+        expect(itr.getValue(FIELDNAME1)).toBe(p[index++].name);
     }
 
     index = 0;
     let navigator = dataSet.navigator();
     for (let itr of navigator){
-        expect(itr.getValue("name")).toBe(p[index++].name);
+        expect(itr.getValue(FIELDNAME1)).toBe(p[index++].name);
     }
 
     let aRow = navigator.first().value;
 
-    expect(aRow.getValue("name")).toBe(NAME_1);
+    expect(aRow.getValue(FIELDNAME1)).toBe(NAME1);
     aRow = navigator.current().value;
-    expect(aRow.getValue("name")).toBe(NAME_1);
+    expect(aRow.getValue(FIELDNAME1)).toBe(NAME1);
 
     aRow = navigator.next().value;
 
-    expect(aRow.getValue("name")).toBe(NAME_2);
+    expect(aRow.getValue(FIELDNAME1)).toBe(NAME2);
 
     aRow = navigator.prior().value;
-    expect(aRow.getValue("name")).toBe(NAME_1);
+    expect(aRow.getValue(FIELDNAME1)).toBe(NAME1);
 
     let result = navigator.prior();
     expect(result.done).toBe(true);
@@ -246,14 +252,50 @@ test('Test iterator and navigator', () => {
     expect(result.value).toBe(undefined);
 
     result = navigator.first();
-    expect(aRow.getValue("name")).toBe(NAME_1);
+    expect(aRow.getValue(FIELDNAME1)).toBe(NAME1);
     aRow = navigator.current().value;
-    expect(aRow.getValue("name")).toBe(NAME_1);
+    expect(aRow.getValue(FIELDNAME1)).toBe(NAME1);
 
 
     index = 1;
     for (let itr of navigator){
-        expect(itr.getValue("name")).toBe(p[index++].name);
+        expect(itr.getValue(FIELDNAME1)).toBe(p[index++].name);
+    }
+
+
+})
+
+test('Delete row test', () => {
+
+    let {dataSet, p} = populateDataset();
+
+    let firstRow = dataSet.navigator().first().value;
+
+    dataSet.navigator().reset();
+
+    for (let row of dataSet.navigator()){
+        console.log("index: " + dataSet.navigator().index + "         name: " + row.getValue(FIELDNAME1));
+    }
+
+    console.log("DELETING _______________________________00");
+
+    dataSet.deleteRow(2);
+
+    dataSet.navigator().reset();
+
+    for (let row of dataSet.navigator()){
+        console.log("index: " + dataSet.navigator().index + "            id: " + row.id + "         name: " + row.getValue(FIELDNAME1));
+    }
+
+    let aRow = dataSet.getRow(2);
+    let aRowId = aRow.id;
+
+    console.log("About to remove " + aRowId);
+
+    dataSet.deleteRow(aRowId);
+
+    for (let row of dataSet.iterator()){
+        console.log("index: " + row.id + "         name: " + row.getValue(FIELDNAME1));
     }
 
 
@@ -263,8 +305,8 @@ function populateDataset() {
     const theObserver = new Observer<Dataset, DatasetRow>();
 
     const columnTypes = [
-        {name: "name", type: FieldType.STRING},
-        {name: "age", type: FieldType.INTEGER}
+        {name: FIELDNAME1, type: FieldType.STRING},
+        {name: FIELDNAME2, type: FieldType.INTEGER}
     ];
 
     const dataSet: Dataset = new Dataset(columnTypes);
@@ -273,13 +315,13 @@ function populateDataset() {
     expect(theObserver.count).toBe(0);
 
     let p = [
-        {name: NAME_1, age: "51"},
-        {name: NAME_2, age: "50"},
-        {name: NAME_3, age: "12"},
-        {name: NAME_4, age: "75"}
+        {name: NAME1, age: AGE1},
+        {name: NAME2, age: AGE2},
+        {name: NAME3, age: AGE3},
+        {name: NAME4, age: AGE4}
     ]
 
-    dataSet.load(defaultPopulator(p));
+    dataSet.load(defaultDataPump(p));
     return {theObserver, dataSet, p};
 }
 
@@ -289,18 +331,18 @@ function doDatarowTest(row: DatasetRow) {
 
     row.subscribe(theObserver.observer);
 
-    row.setFieldValue("name", "Gerry");
-    expect(theObserver.detail.name).toBe("name");
-    expect(theObserver.detail.value).toBe("Gerry");
+    row.setFieldValue(FIELDNAME1, NAME1);
+    expect(theObserver.detail.name).toBe(FIELDNAME1);
+    expect(theObserver.detail.value).toBe(NAME1);
 
-    row.setFieldValue("age", "51");
-    expect(theObserver.detail.name).toBe("age");
-    expect(theObserver.detail.value).toBe("51");
+    row.setFieldValue(FIELDNAME2, AGE1);
+    expect(theObserver.detail.name).toBe(FIELDNAME2);
+    expect(theObserver.detail.value).toBe(AGE1);
 
-    row.setFieldValue("age", "52");
+    row.setFieldValue(FIELDNAME2, "52");
     expect(theObserver.detail.value).toBe("52");
 
-    expect(row.getValue("age")).toBe("52");
+    expect(row.getValue(FIELDNAME2)).toBe("52");
 
     let errorThrown = false;
     try {
@@ -320,10 +362,10 @@ function doDatarowTest(row: DatasetRow) {
         switch (count) {
 
             case 0 :
-                expect(field.name).toBe("name");
+                expect(field.name).toBe(FIELDNAME1);
                 break;
             case 1 :
-                expect(field.name).toBe("age");
+                expect(field.name).toBe(FIELDNAME2);
                 break;
             default:
                 break;

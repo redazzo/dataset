@@ -1,4 +1,4 @@
-import {Dataset, DataPump} from "./dataset";
+import {Dataset, DataPump, FieldDescriptors} from "./dataset";
 import {
     AuthChangeEvent,
     AuthError,
@@ -8,6 +8,58 @@ import {
     UserResponse
 } from '@supabase/supabase-js';
 
+export class SupabaseDataset extends Dataset {
+
+
+    private selectSQL : {
+        from: string,
+        select: string,
+        filter?: string
+    }
+
+    private upsertSQL : {
+
+    }
+
+    private rowCountLimit = 100;
+
+    constructor(private table : string, fieldDescriptors : FieldDescriptors, private primaryKeys: { key: string, auto: boolean }[], private supabaseClient : SupabaseClient) {
+        super(fieldDescriptors);
+
+    }
+
+    public init() {
+        this.select = async () => {
+            return await this.supabaseClient.from(this.table).select().limit(this.rowCountLimit);
+        }
+    }
+
+    public set select( v: () => Promise<{ data, error }> ){
+
+    }
+
+    public set insert( v: () => { data, error } ) {
+
+    }
+
+    public set upsert( v: () => { data, error } ) {
+
+    }
+
+    public set delete( v: () => { data, error } ) {
+
+    }
+
+    public async load(){
+
+    }
+
+    public async write(){
+
+    }
+
+
+}
 export class SupabaseDatasetPump implements DataPump {
 
     private readonly supabaseClient;

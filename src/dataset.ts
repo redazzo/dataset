@@ -88,6 +88,11 @@ export interface DataPump {
     load(dataset: Dataset): void
 }
 
+export interface PersistentDataPump extends DataPump {
+
+    save(dataset: Dataset): void
+}
+
 
 export class DatasetRow implements DataRow {
 
@@ -180,13 +185,17 @@ export class DatasetRow implements DataRow {
 
 class DatasetRowNavigator implements NavigableIterator<DatasetRow> {
 
-    private index: number;
-    private readonly maxSize: number;
+    private iterationIndex: number;
+    //private readonly maxSize: number;
     private theCurrentRow: DatasetRow;
 
     public constructor(private readonly datasetRows: Map<number, DatasetRow>) {
-        this.maxSize = datasetRows.size;
+        //this.maxSize = datasetRows.size;
         this.reset();
+    }
+
+    public get index() {
+        return this.iterationIndex;
     }
 
     public [Symbol.iterator](): IterableIterator<DatasetRow> {
@@ -194,7 +203,7 @@ class DatasetRowNavigator implements NavigableIterator<DatasetRow> {
     }
 
     public reset() {
-        this.index = -1;
+        this.iterationIndex = -1;
         if (this.datasetRows.size > 0) {
             this.theCurrentRow = this.datasetRows.get(0);
         }
@@ -202,8 +211,8 @@ class DatasetRowNavigator implements NavigableIterator<DatasetRow> {
 
     public first(): IteratorResult<DatasetRow, any> {
         if (this.datasetRows.size > 0) {
-            this.index = 0;
-            this.theCurrentRow = this.datasetRows.get(this.index);
+            this.iterationIndex = 0;
+            this.theCurrentRow = this.datasetRows.get(this.iterationIndex);
         } else {
             this.theCurrentRow = null;
         }
@@ -214,9 +223,9 @@ class DatasetRowNavigator implements NavigableIterator<DatasetRow> {
     }
 
     public prior(): IteratorResult<DatasetRow> {
-        if (this.index > 0) {
-            this.index--;
-            this.theCurrentRow = this.datasetRows.get(this.index);
+        if (this.iterationIndex > 0) {
+            this.iterationIndex--;
+            this.theCurrentRow = this.datasetRows.get(this.iterationIndex);
 
             return {
                 value: this.theCurrentRow
@@ -238,13 +247,25 @@ class DatasetRowNavigator implements NavigableIterator<DatasetRow> {
         }
     }
 
+    public last() : IteratorResult<DatasetRow> {
+
+        let maxIndex = findMaxIndex(this.datasetRows);
+
+        this.theCurrentRow = this.datasetRows.get(maxIndex);
+
+        return {
+            value: this.theCurrentRow
+        }
+    }
+
+
 
     public next(...args: [] | [undefined]): IteratorResult<DatasetRow, any> {
 
-        if (this.index < this.maxSize - 1) {
+        if (this.iterationIndex < this.datasetRows.size - 1) {
 
-            this.index++;
-            this.theCurrentRow = this.datasetRows.get(this.index);
+            this.iterationIndex++;
+            this.theCurrentRow = this.datasetRows.get(this.iterationIndex);
 
             return {
                 value: this.theCurrentRow
@@ -276,6 +297,18 @@ class DatasetRowNavigator implements NavigableIterator<DatasetRow> {
 
 }
 
+function findMaxIndex( m : Map<number, DatasetRow>) {
+    //let maxIndex = 0;
+
+    // TODO Consider creating a map that keeps track of the maximum index if performance becomes an issue.
+    //for (let key of m.keys()) {
+    //    if (key > maxIndex) maxIndex = key;
+    //}
+    //return maxIndex;
+
+    return m.size - 1;
+}
+
 export interface NavigableIterator<T> extends IterableIterator<T>, DataRow {
 
     first(): IteratorResult<T, any>
@@ -284,7 +317,11 @@ export interface NavigableIterator<T> extends IterableIterator<T>, DataRow {
 
     current(): IteratorResult<T, any>
 
+    last(): IteratorResult<T,  any>
+
     reset(): void
+
+    readonly index
 
 }
 
@@ -297,7 +334,6 @@ export class Dataset implements DataRow {
     private readonly typeHash: number;
 
     private theNavigator: DatasetRowNavigator = null;
-
 
     constructor(fieldDescriptors: FieldDescriptors);
 
@@ -366,6 +402,23 @@ export class Dataset implements DataRow {
 
     }
 
+    public get json_d(): {} {
+
+        let data = [];
+        for (let row of this.iterator()) {
+
+            let ro = {}
+            for (let field of row.entries()) {
+                ro[field.name] = field.value;
+            }
+
+            data.push(ro);
+        }
+
+        return data;
+
+    }
+
     public iterator(): IterableIterator<DatasetRow> {
         return new DatasetRowNavigator(this.theRows);
     }
@@ -406,9 +459,13 @@ export class Dataset implements DataRow {
         currentRow.setFieldValue(fieldName, value);
     }
 
-    public getRow(rowId: string): DatasetRow {
+    public getRow(rowId: string | number): DatasetRow {
 
         if (this.theRows.size == 0) return null;
+
+        if (typeof rowId == "number"){
+            return this.theRows.get(rowId);
+        }
 
         for (let row of this.theRows.values()) {
 
@@ -461,6 +518,56 @@ export class Dataset implements DataRow {
         return row;
     }
 
+    public deleteRow(rowId : string | number) : DatasetRow {
+        /*
+        Deletion is an expensive operation as the order of the dataset is managed via a map of integers to rows. Removal
+        of a row subsequently needs the map to be partially rebuilt.
+         */
+
+        let maxIndex = this.theRows.size - 1;
+
+        let theRow = null;
+        let key = -1;
+        if (typeof rowId === "number" ){
+
+            theRow = this.theRows.get(rowId);
+            key = rowId;
+
+        } else {
+
+            for (let aKey of this.theRows.keys()) {
+
+                let aRow = this.theRows.get(aKey);
+
+                if (aRow.id === rowId) {
+                    theRow = aRow;
+                    key = aKey;
+                }
+            }
+        }
+
+
+        if (theRow == undefined || theRow == null){
+            return null;
+        }
+
+        let lastRowDeleted = key == this.theRows.size - 1;
+        this.theRows.delete(key);
+
+
+        // Remap the remainder
+        if (!lastRowDeleted){
+            for (let i=key; i < maxIndex; i++){
+                let nextRow = this.theRows.get(i + 1);
+                this.theRows.set(i, nextRow);
+            }
+            this.theRows.delete(this.theRows.size - 1);
+        }
+
+        // TODO update DatasetEvent to carry a status of the change, e.g. "ADDED_ROW", "DELETED_ROW"
+        this.subject.next(new DatasetEvent<Dataset, DatasetRow>(this.datasetId, theRow, this));
+    }
+
     public subscribe(observer: (v: DatasetEvent<Dataset, DataRow>) => void): Subscription {
         return this.subject.subscribe(observer);
     }
@@ -503,7 +610,7 @@ function calculateTypeHash(descriptors: Map<string, FieldDescriptor>): number {
 }
 
 // Not the best ...
-export function defaultPopulator(data: {}[]): DataPump {
+export function defaultDataPump(data: {}[]): DataPump {
 
     return new class implements DataPump {
 
