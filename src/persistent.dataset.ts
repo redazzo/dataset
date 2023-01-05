@@ -1,10 +1,10 @@
-import {DataPump, Dataset, DatasetRow, FieldDescriptors, PersistentDataPump} from "./dataset";
+import {DataPump, Dataset, DatasetRow, FieldDescriptors, ObjectArrayDataPump, PersistentDataPump} from "./dataset";
 import * as fs from "fs";
 import * as path from "path";
 
 export class PersistentDataset extends Dataset {
 
-    constructor(fieldDescriptors: FieldDescriptors, private readonly persistentDataPump : PersistentDataPump) {
+    constructor(fieldDescriptors: FieldDescriptors, protected readonly persistentDataPump : PersistentDataPump) {
         super(fieldDescriptors);
     }
 
@@ -12,42 +12,35 @@ export class PersistentDataset extends Dataset {
         await super.load(this.persistentDataPump);
     }
 
-    public save() {
-         this.persistentDataPump.save(this);
+    public async save() {
+         await this.persistentDataPump.save(this);
     }
 }
 
+export class SQLPersistentDataset extends PersistentDataset {
 
-export class FilePersistentDataPump implements PersistentDataPump {
-
-    private readonly data: string;
-
-    constructor(private filePath : string){
-
-        let strData = fs.readFileSync(path.join(__dirname, filePath),'utf8');
-        this.data = JSON.parse(strData);
+    constructor(fieldDescriptors: FieldDescriptors, protected readonly persistentDataPump : PersistentDataPump) {
+        super(fieldDescriptors, persistentDataPump);
     }
 
-    load(dataset: Dataset): void {
-        for (let rowValues of this.data) {
 
-            let row = new DatasetRow();
-            let fieldDescriptors = dataset.fieldDescriptors;
-            for (let entry of fieldDescriptors.values()) {
+}
 
-                row.addColumn(entry.name, entry.type);
-            }
 
-            // Seems a bit dirty
-            let mp: Map<string, string> = new Map<string, string>(Object.entries(rowValues));
+export class FilePersistentDataPump extends ObjectArrayDataPump {
 
-            for (let key of mp.keys()) {
-                row.setFieldValue(key, mp.get(key));
-            }
+    constructor(private filePath : string){
+        let data = FilePersistentDataPump.readFromFile(filePath);
+        super(data);
+    }
 
-            dataset.addRow(row);
+    private static readFromFile(filePath : string) : {}[]  {
+        let strData = fs.readFileSync(path.join(__dirname, filePath),'utf8');
+        return JSON.parse(strData);
+    }
 
-        }
+    public reloadFile() {
+        this.data = FilePersistentDataPump.readFromFile(this.filePath);
     }
 
     public save(dataset: Dataset): void {

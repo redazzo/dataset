@@ -6,7 +6,7 @@ import {
     Field,
     FieldDescriptor,
     FieldType,
-    defaultDataPump,
+    ObjectArrayDataPump,
     TypedField
 } from '../dataset'
 
@@ -321,7 +321,7 @@ function populateDataset() {
         {name: NAME4, age: AGE4}
     ]
 
-    dataSet.load(defaultDataPump(p));
+    dataSet.load(new ObjectArrayDataPump(p));
     return {theObserver, dataSet, p};
 }
 

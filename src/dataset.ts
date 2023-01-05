@@ -44,8 +44,25 @@ export class DatasetEvent<SourceType, DetailType> {
     constructor(
         public readonly id: string,
         public readonly detail: DetailType,
-        public readonly source: SourceType) {
+        public readonly source: SourceType,
+        public readonly eventType: DatasetEventType ) {
     }
+}
+
+export enum DatasetEventType {
+
+    FIELD_VALUE_INSERTED,
+    FIELD_VALUE_UPDATED,
+    FIELD_VALUE_DELETED,
+    FIELD_VALUE_VALIDATED,
+
+    ROW_INSERTED,
+    ROW_UPDATED,
+    ROW_DELETED,
+    ROW_VALIDATED,
+
+    DATASET_UPDATED
+
 }
 
 export class TypedField implements Field {
@@ -63,7 +80,7 @@ export class TypedField implements Field {
 
     set value(value: string) {
         this.fieldValue = value;
-        this.subject.next(new DatasetEvent<Field, Field>(this.id, this, this));
+        this.subject.next(new DatasetEvent<Field, Field>(this.id, this, this, DatasetEventType.FIELD_VALUE_UPDATED));
     }
 
     public subscribe(observer: (e: DatasetEvent<Field, Field>) => void): Subscription {
@@ -169,7 +186,7 @@ export class DatasetRow implements DataRow {
         tf.subscribe((v: DatasetEvent<Field, Field>) => {
 
             thisRow.subject.next(
-                new DatasetEvent<DatasetRow, Field>(thisRow.id, v.detail, thisRow)
+                new DatasetEvent<DatasetRow, Field>(thisRow.id, v.detail, thisRow, DatasetEventType.ROW_UPDATED)
             );
         });
 
@@ -510,12 +527,12 @@ export class Dataset implements DataRow {
         // Make the dataset an observer of the row, and fire an event if there is a change to the row
         row.subscribe((v) => {
 
-            datasetThis.subject.next(new DatasetEvent<Dataset, DatasetRow>(datasetThis.datasetId, row, datasetThis));
+            datasetThis.subject.next(new DatasetEvent<Dataset, DatasetRow>(datasetThis.datasetId, row, datasetThis,DatasetEventType.ROW_UPDATED));
         });
 
         let noRows = this.theRows.size
         this.theRows.set(noRows, row);
-        this.subject.next(new DatasetEvent<Dataset, DatasetRow>(this.datasetId, row, this));
+        this.subject.next(new DatasetEvent<Dataset, DatasetRow>(this.datasetId, row, this, DatasetEventType.ROW_INSERTED));
         return row;
     }
 
@@ -566,7 +583,7 @@ export class Dataset implements DataRow {
         }
 
         // TODO update DatasetEvent to carry a status of the change, e.g. "ADDED_ROW", "DELETED_ROW"
-        this.subject.next(new DatasetEvent<Dataset, DatasetRow>(this.datasetId, theRow, this));
+        this.subject.next(new DatasetEvent<Dataset, DatasetRow>(this.datasetId, theRow, this, DatasetEventType.ROW_DELETED));
     }
 
     public subscribe(observer: (v: DatasetEvent<Dataset, DataRow>) => void): Subscription {
@@ -610,32 +627,32 @@ function calculateTypeHash(descriptors: Map<string, FieldDescriptor>): number {
 
 }
 
-// Not the best ...
-export function defaultDataPump(data: {}[]): DataPump {
+export class ObjectArrayDataPump implements DataPump {
 
-    return new class implements DataPump {
 
-        load(dataset: Dataset): void {
-            for (let rowValues of data) {
-
-                let row = new DatasetRow();
-                let fieldDescriptors = dataset.fieldDescriptors;
-                for (let entry of fieldDescriptors.values()) {
-
-                    row.addColumn(entry.name, entry.type);
-                }
-
-                // Seems a bit dirty
-                let mp: Map<string, string> = new Map<string, string>(Object.entries(JSON.parse(JSON.stringify(rowValues))));
-
-                for (let key of mp.keys()) {
-                    row.setFieldValue(key, mp.get(key));
-                }
-
-                dataset.addRow(row);
-
-            }
-        }
+    constructor(protected data : {}[]) {
     }
 
+    public load(dataset: Dataset): void {
+        for (let rowValues of this.data) {
+
+            let row = new DatasetRow();
+            let fieldDescriptors = dataset.fieldDescriptors;
+            for (let entry of fieldDescriptors.values()) {
+
+                row.addColumn(entry.name, entry.type);
+            }
+
+            // Seems a bit dirty
+            let mp: Map<string, string> = new Map<string, string>(Object.entries(rowValues));
+
+            for (let key of mp.keys()) {
+                row.setFieldValue(key, mp.get(key));
+            }
+
+            dataset.addRow(row);
+
+        }
+    }
 }
+

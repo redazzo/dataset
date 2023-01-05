@@ -3,9 +3,11 @@ import {FieldType} from "../dataset";
 
 let expectedNames = ["Bob", "Jane", "Mary", "David"];
 
+
 test( 'Test file persistent dataset read, add row, save, reload from disk with new row, delete row, and save back to original state', async () => {
 
-    let persistentDataPump_1 = new FilePersistentDataPump("./test/persistent_test_data.json")
+
+    let persistentDataPump = new FilePersistentDataPump("./test/persistent_test_data.json")
 
     let persistentDataset = new PersistentDataset(
         [
@@ -18,7 +20,7 @@ test( 'Test file persistent dataset read, add row, save, reload from disk with n
                 type: FieldType.INTEGER
             }],
 
-        persistentDataPump_1
+        persistentDataPump
 
     );
 
@@ -48,7 +50,7 @@ test( 'Test file persistent dataset read, add row, save, reload from disk with n
     let expectedNamesPlus = expectedNames.slice();
     expectedNamesPlus.push("Bob NewSave");
 
-    let persistentDataPump_2 = new FilePersistentDataPump("./test/persistent_test_data.json")
+    let newPersistentDataPump = new FilePersistentDataPump("./test/persistent_test_data.json")
 
     let newPersistentDataset = new PersistentDataset(
         [
@@ -61,7 +63,7 @@ test( 'Test file persistent dataset read, add row, save, reload from disk with n
                 type: FieldType.INTEGER
             }],
 
-        persistentDataPump_2
+        newPersistentDataPump
 
     );
 
