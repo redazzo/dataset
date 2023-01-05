@@ -5,6 +5,7 @@ export enum FieldType {
     STRING,
     INTEGER,
     FLOAT,
+    DATE
 }
 
 export interface FieldDescriptor {

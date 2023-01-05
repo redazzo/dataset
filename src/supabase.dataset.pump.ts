@@ -8,6 +8,9 @@ import {
     UserResponse
 } from '@supabase/supabase-js';
 
+/*
+Incomplete
+ */
 export class SupabaseDataset extends Dataset {
 
 
