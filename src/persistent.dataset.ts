@@ -12,9 +12,8 @@ export class PersistentDataset extends Dataset {
         await super.load(this.persistentDataPump);
     }
 
-    public async save() {
-        this.persistentDataPump.save(this);
-
+    public save() {
+         this.persistentDataPump.save(this);
     }
 }
 
@@ -24,7 +23,9 @@ export class FilePersistentDataPump implements PersistentDataPump {
     private readonly data: string;
 
     constructor(private filePath : string){
-        this.data = require(filePath);
+
+        let strData = fs.readFileSync(path.join(__dirname, filePath),'utf8');
+        this.data = JSON.parse(strData);
     }
 
     load(dataset: Dataset): void {
@@ -53,9 +54,9 @@ export class FilePersistentDataPump implements PersistentDataPump {
 
         const json = JSON.stringify(dataset.json_d);
 
-        //fs.openSync(path.join(__dirname, this.filePath), fs.)
+        let fileDescriptorId = fs.openSync(path.join(__dirname, this.filePath),'r+');
         fs.writeFileSync(path.join(__dirname, this.filePath), json);
-        fs.close
+        fs.closeSync(fileDescriptorId);
 
 
     }
