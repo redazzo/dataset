@@ -17,16 +17,6 @@ export class PersistentDataset extends Dataset {
     }
 }
 
-export class SQLPersistentDataset extends PersistentDataset {
-
-    constructor(fieldDescriptors: FieldDescriptors, protected readonly persistentDataPump : PersistentDataPump) {
-        super(fieldDescriptors, persistentDataPump);
-    }
-
-
-}
-
-
 export class FilePersistentDataPump extends ObjectArrayDataPump {
 
     constructor(private filePath : string){
@@ -53,8 +43,4 @@ export class FilePersistentDataPump extends ObjectArrayDataPump {
 
 
     }
-
-
-
-
 }
