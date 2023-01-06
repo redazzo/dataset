@@ -224,10 +224,12 @@ class DatasetRowNavigator implements NavigableIterator<DatasetRow> {
         this.iterationIndex = -1;
         if (this.datasetRows.size > 0) {
             this.theCurrentRow = this.datasetRows.get(0);
+        } else {
+            this.theCurrentRow = null;
         }
     }
 
-    public first(): IteratorResult<DatasetRow, any> {
+    public first(): IteratorResult<DatasetRow> {
         if (this.datasetRows.size > 0) {
             this.iterationIndex = 0;
             this.theCurrentRow = this.datasetRows.get(this.iterationIndex);
@@ -255,8 +257,6 @@ class DatasetRowNavigator implements NavigableIterator<DatasetRow> {
             value: undefined,
             done: true
         }
-
-
     }
 
     public current(): IteratorResult<DatasetRow> {
@@ -278,7 +278,7 @@ class DatasetRowNavigator implements NavigableIterator<DatasetRow> {
 
 
 
-    public next(...args: [] | [undefined]): IteratorResult<DatasetRow, any> {
+    public next(...args: [] | [undefined]): IteratorResult<DatasetRow> {
 
         if (this.iterationIndex < this.datasetRows.size - 1) {
 
@@ -297,15 +297,51 @@ class DatasetRowNavigator implements NavigableIterator<DatasetRow> {
         }
     }
 
+    public moveTo(index : number) : IteratorResult<DatasetRow> {
+
+        if (this.datasetRows.size <= 0){
+            this.theCurrentRow = undefined;
+            return {
+                value: this.theCurrentRow,
+                done: true
+            }
+        }
+
+        if (index < 0) {
+            this.reset();
+
+            return {
+                value: undefined,
+                done: true
+            }
+        }
+
+        this.iterationIndex = index;
+        this.theCurrentRow = this.datasetRows.get(this.iterationIndex);
+
+        let value = this.theCurrentRow;
+        let done = this.iterationIndex == this.datasetRows.size - 1;
+
+        return {
+            value: value,
+            done: done
+        }
+    }
+
     public getField(fieldName: string): Field {
+        if (this.datasetRows.size == 0) return undefined;
+
         return this.theCurrentRow.getField(fieldName);
     }
 
     public getValue(fieldName: string): string {
+        if (this.datasetRows.size == 0) return undefined;
+
         return this.theCurrentRow.getValue(fieldName);
     }
 
     public setFieldValue(fieldName: string, value: string): void {
+        if (this.datasetRows.size == 0) throw new Error("Dataset has no rows.");
         return this.theCurrentRow.setFieldValue(fieldName, value);
     }
 
@@ -329,15 +365,17 @@ function findMaxIndex( m : Map<number, DatasetRow>) {
 
 export interface NavigableIterator<T> extends IterableIterator<T>, DataRow {
 
-    first(): IteratorResult<T, any>
+    first(): IteratorResult<T>
 
-    prior(): IteratorResult<T, any>
+    prior(): IteratorResult<T>
 
-    current(): IteratorResult<T, any>
+    current(): IteratorResult<T>
 
-    last(): IteratorResult<T,  any>
+    last(): IteratorResult<T>
 
     reset(): void
+
+    moveTo(index : number) : IteratorResult<T>
 
     readonly index
 
@@ -462,19 +500,18 @@ export class Dataset implements DataRow {
 
     }
 
-    public getField(fieldName: string): TypedField {
-        let currentRow = this.navigator().current().value;
-        return currentRow.getField(fieldName);
+    public getField(fieldName: string): Field {
+        return this.navigator().getField(fieldName);
+
     }
 
     public getValue(fieldName: string): string {
-        let currentRow = this.navigator().current().value;
-        return currentRow.getValue(fieldName);
+        return this.navigator().getValue(fieldName);
+
     }
 
     public setFieldValue(fieldName: string, value: string): void {
-        let currentRow = this.navigator().current().value;
-        currentRow.setFieldValue(fieldName, value);
+        this.navigator().setFieldValue(fieldName, value);
     }
 
     public getRow(rowId: string | number): DatasetRow {
@@ -532,6 +569,7 @@ export class Dataset implements DataRow {
 
         let noRows = this.theRows.size
         this.theRows.set(noRows, row);
+        this.navigator().last();
         this.subject.next(new DatasetEvent<Dataset, DatasetRow>(this.datasetId, row, this, DatasetEventType.ROW_INSERTED));
         return row;
     }
@@ -580,7 +618,9 @@ export class Dataset implements DataRow {
                 this.theRows.set(i, nextRow);
             }
             this.theRows.delete(this.theRows.size - 1);
+
         }
+        this.navigator().moveTo(key - 1);
 
         // TODO update DatasetEvent to carry a status of the change, e.g. "ADDED_ROW", "DELETED_ROW"
         this.subject.next(new DatasetEvent<Dataset, DatasetRow>(this.datasetId, theRow, this, DatasetEventType.ROW_DELETED));

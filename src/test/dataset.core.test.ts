@@ -269,34 +269,41 @@ test('Delete row test', () => {
 
     let {dataSet, p} = populateDataset();
 
-    let firstRow = dataSet.navigator().first().value;
-
-    dataSet.navigator().reset();
-
-    for (let row of dataSet.navigator()){
-        console.log("index: " + dataSet.navigator().index + "         name: " + row.getValue(FIELDNAME1));
-    }
-
-    console.log("DELETING _______________________________00");
+    expect(dataSet.rowCount).toBe(4);
 
     dataSet.deleteRow(2);
 
-    dataSet.navigator().reset();
+    expect(dataSet.rowCount).toBe(3);
 
-    for (let row of dataSet.navigator()){
-        console.log("index: " + dataSet.navigator().index + "            id: " + row.id + "         name: " + row.getValue(FIELDNAME1));
+    let expectedNames = [NAME1, NAME2, NAME4];
+    let expectedNamesIterator = expectedNames.values();
+    for (let row of dataSet.iterator()){
+        expect(row.getValue(FIELDNAME1)).toBe(expectedNamesIterator.next().value);
     }
 
     let aRow = dataSet.getRow(2);
     let aRowId = aRow.id;
 
-    console.log("About to remove " + aRowId);
-
     dataSet.deleteRow(aRowId);
+    expect(dataSet.rowCount).toBe(2);
 
+    expectedNames = [NAME1, NAME2];
+
+    let expectedIterator = expectedNames.values();
     for (let row of dataSet.iterator()){
-        console.log("index: " + row.id + "         name: " + row.getValue(FIELDNAME1));
+        let expected = expectedIterator.next().value;
+        expect(row.getValue(FIELDNAME1)).toBe(expected);
     }
+
+
+    dataSet.deleteRow(1); // This will move the current row to be the 0th row, as a delete moves the cursor to the prior row.
+    expect(dataSet.rowCount).toBe(1);
+    expect(dataSet.getValue(FIELDNAME1)).toBe(NAME1);
+
+    dataSet.deleteRow(0);
+    expect(dataSet.rowCount).toBe(0);
+    expect(dataSet.getValue(FIELDNAME1)).toBe(undefined);
+
 
 
 })
