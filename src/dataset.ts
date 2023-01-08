@@ -1,5 +1,6 @@
 import {Subject, Subscription} from "rxjs";
 import {v4 as uuidv4} from 'uuid';
+import {PersistentDataset} from "./persistent_dataset";
 
 export enum FieldType {
     STRING,
@@ -101,14 +102,14 @@ export interface DataRow {
 
 }
 
-export interface DataPump {
+export interface DataPump<T extends Dataset> {
 
-    load(dataset: Dataset): void
+    load(dataset: T): void
 }
 
-export interface PersistentDataPump extends DataPump {
+export interface PersistentDataPump<T extends PersistentDataset> extends DataPump<PersistentDataset> {
 
-    save(dataset: Dataset): void
+    save(dataset: T): void
 }
 
 
@@ -630,7 +631,7 @@ export class Dataset implements DataRow {
         return this.subject.subscribe(observer);
     }
 
-    public async load(pop: DataPump): Promise<void> {
+    public async load(pop: DataPump<Dataset>): Promise<void> {
 
         return pop.load(this);
     }
@@ -667,7 +668,7 @@ function calculateTypeHash(descriptors: Map<string, FieldDescriptor>): number {
 
 }
 
-export class ObjectArrayDataPump implements DataPump {
+export class ObjectArrayDataPump implements DataPump<Dataset> {
 
 
     constructor(protected data : {}[]) {

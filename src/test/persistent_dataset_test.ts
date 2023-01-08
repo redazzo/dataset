@@ -1,4 +1,4 @@
-import {FilePersistentDataPump, PersistentDataset} from "../persistent_dataset_pump";
+import {FilePersistentDataPump, PersistentDataset} from "../persistent_dataset";
 import {FieldType} from "../dataset";
 
 let expectedNames = ["Bob", "Jane", "Mary", "David"];

@@ -1,5 +1,6 @@
-import {Dataset, FieldType} from "../dataset";
+import {FieldType} from "../dataset";
 import {SQLDatabasePump} from "../sql_database_pump";
+import {KeyedPersistentDataset} from "../persistent_dataset";
 
 const credentials = {
     url: 'https://pnjvoeaweebjdtzyhmqg.supabase.co',
@@ -10,15 +11,18 @@ const TABLE_NAME = "persistence_test"
 const MAKE = "make"
 const MODEL = "model"
 const YEAR = "year"
-//const COLUMN_NAMES_AS_STRING = MAKE + "," + MODEL+ "," + YEAR
+const ID = "id"
+const COLUMN_NAMES_AS_STRING = MAKE + "," + MODEL+ "," + YEAR
 
 test('Supabase test', async () => {
 
-    let supabaseDatasetPump = new SQLDatabasePump(credentials);
+    let supabaseDatasetPump = new SQLDatabasePump(credentials, true);
 
-    supabaseDatasetPump.select = () => {
-        return supabaseDatasetPump.supabaseClient.from('persistence_test').select('make, model, year', {count: 'exact'}).eq('id','2');
-    }
+
+    //supabaseDatasetPump.update = () => {
+    //    return supabaseDatasetPump.supabaseClient.from(TABLE_NAME).update({ name: 'Australia' })
+    //        .eq('id', 1).select();
+    //}
     //.filter(this.sqlParameters?.filter);
 
     const columnTypes = [
@@ -33,11 +37,15 @@ test('Supabase test', async () => {
         {
             name: YEAR,
             type: FieldType.INTEGER
+        },
+        {
+            name: ID,
+            type: FieldType.INTEGER
         }
     ];
 
-    let dataset = new Dataset(columnTypes);
-    await dataset.load(supabaseDatasetPump);
+    let dataset = new KeyedPersistentDataset(columnTypes, supabaseDatasetPump,{ tableName: TABLE_NAME, keys: [ID]});
+    await dataset.load();
     console.log(dataset.json_d);
 
 });
