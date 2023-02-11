@@ -1,8 +1,8 @@
 import {
     Dataset,
-    DatasetEvent,
     DatasetRow,
     DefaultFieldDescriptor,
+    DefaultObserver,
     Field,
     FieldDescriptor,
     FieldType,
@@ -29,26 +29,6 @@ const FIELDNAME2 = "age";
 
 
 
-class Observer<SourceType, DetailType> {
-
-    public detail: DetailType;
-    public id: string;
-    public source: SourceType;
-    public count = 0;
-
-    private theObserver: (v: DatasetEvent<SourceType, DetailType>) => void = (v: DatasetEvent<SourceType, DetailType>) => {
-
-        this.id = v.id;
-        this.detail = v.detail;
-        this.source = v.source;
-        this.count++;
-    }
-
-    public get observer(): (v: DatasetEvent<SourceType, DetailType>) => void {
-        return this.theObserver;
-    }
-}
-
 test('Dataset value is updated', () => {
 
     const field = new TypedField(FIELDNAME1, EMPTY_STRING, FieldType.STRING);
@@ -68,8 +48,8 @@ test('Test subscribed field observers', () => {
 
     const field = new TypedField(FIELDNAME1, EMPTY_STRING, FieldType.STRING);
 
-    const testObserver1 = new Observer<Field, Field>();
-    const testObserver2 = new Observer<Field, Field>();
+    const testObserver1 = new DefaultObserver<Field, Field>();
+    const testObserver2 = new DefaultObserver<Field, Field>();
 
 
     field.subscribe(testObserver1.observer);
@@ -147,7 +127,7 @@ test('Test type hash of datasetrow', () => {
 
 test('Dataset Test', () => {
 
-    const theObserver = new Observer<Dataset, DatasetRow>();
+    const theObserver = new DefaultObserver<Dataset, DatasetRow>();
 
     const columnTypes = [
         {
@@ -208,7 +188,7 @@ test('Populate dataset test', () => {
 
     expect(firstRow.getValue(FIELDNAME2)).toBe(AGE1);
 
-    const rowObserver = new Observer<DatasetRow, Field>();
+    const rowObserver = new DefaultObserver<DatasetRow, Field>();
     firstRow.subscribe(rowObserver.observer);
 
     expect(rowObserver.count).toBe(0);
@@ -314,7 +294,7 @@ test('Delete row test', () => {
 })
 
 function populateDataset() {
-    const theObserver = new Observer<Dataset, DatasetRow>();
+    const theObserver = new DefaultObserver<Dataset, DatasetRow>();
 
     const columnTypes = [
         {name: FIELDNAME1, type: FieldType.STRING},
@@ -339,7 +319,7 @@ function populateDataset() {
 
 
 function doDatarowTest(row: DatasetRow) {
-    const theObserver = new Observer<DatasetRow, Field>();
+    const theObserver = new DefaultObserver<DatasetRow, Field>();
 
     row.subscribe(theObserver.observer);
 

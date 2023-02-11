@@ -758,3 +758,22 @@ export class ObjectArrayDataPump implements DataPump<Dataset> {
     }
 }
 
+export class DefaultObserver<SourceType, DetailType> {
+
+    public detail: DetailType;
+    public id: string;
+    public source: SourceType;
+    public count = 0;
+
+    private theObserver: (v: DatasetEvent<SourceType, DetailType>) => void = (v: DatasetEvent<SourceType, DetailType>) => {
+
+        this.id = v.id;
+        this.detail = v.detail;
+        this.source = v.source;
+        this.count++;
+    }
+
+    public get observer(): (v: DatasetEvent<SourceType, DetailType>) => void {
+        return this.theObserver;
+    }
+}
