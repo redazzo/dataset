@@ -13,11 +13,10 @@ const MODEL = "model"
 const YEAR = "year"
 const ID = "id"
 const COLUMN_NAMES_AS_STRING = MAKE + "," + MODEL+ "," + YEAR
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-test('Supabase test', async () => {
-
+function createDataset() {
     let supabaseDatasetPump = new SQLDatabasePump(credentials, true);
-
 
     //supabaseDatasetPump.update = () => {
     //    return supabaseDatasetPump.supabaseClient.from(TABLE_NAME).update({ name: 'Australia' })
@@ -44,8 +43,46 @@ test('Supabase test', async () => {
         }
     ];
 
-    let dataset = new KeyedPersistentDataset(columnTypes, supabaseDatasetPump,{ tableName: TABLE_NAME, keys: [ID]});
+    let dataset = new KeyedPersistentDataset(columnTypes, supabaseDatasetPump, {tableName: TABLE_NAME, keys: [ID]});
+    return dataset;
+}
+
+test('Supabase test', async () => {
+    let dataset = createDataset();
+
     await dataset.load();
     console.log(dataset.json_d);
+
+});
+
+test( "STUFF",  async () => {
+
+    let dataset = createDataset();
+    await dataset.load();
+
+    console.log(dataset.json_d);
+
+    dataset.navigator().first();
+
+    let originalValue = dataset.getField("make").value;
+    console.log("At " + originalValue);
+
+    dataset.setFieldValue("make","LALALAND");
+
+    await sleep(1000);
+
+    let reloaded = createDataset();
+    await reloaded.load();
+    console.log(reloaded.json_d);
+
+    reloaded.setFieldValue("make",originalValue);
+    await sleep(1000);
+
+
+    reloaded = createDataset();
+    await reloaded.load();
+    console.log(reloaded.json_d);
+
+    await sleep(1000);
 
 });

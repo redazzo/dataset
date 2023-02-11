@@ -24,7 +24,7 @@ test( 'Test file persistent dataset read, add row, save, reload from disk with n
 
     );
 
-    persistentDataset.load();
+    await persistentDataset.load();
 
     // TEST *******************************************
     expect(persistentDataset.rowCount).toBe(4);

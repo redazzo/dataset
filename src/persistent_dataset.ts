@@ -11,6 +11,8 @@ export enum Comparator {
     LIKE
 
 }
+
+
 export class PersistentDataset extends Dataset {
 
     constructor(fieldDescriptors: FieldDescriptors, protected readonly persistentDataPump : PersistentDataPump<PersistentDataset>) {
@@ -64,9 +66,10 @@ export class KeyedPersistentDataset extends PersistentDataset {
     public get source() : { tableName: string, keys : string[] } {
         return this.tableSource;
     }
+
 }
 
-export class FilePersistentDataPump<T extends Dataset> extends ObjectArrayDataPump {
+export class FilePersistentDataPump<T extends PersistentDataset> extends ObjectArrayDataPump implements PersistentDataPump<T> {
 
     constructor(private filePath : string){
         let data = FilePersistentDataPump.readFromFile(filePath);
@@ -82,14 +85,14 @@ export class FilePersistentDataPump<T extends Dataset> extends ObjectArrayDataPu
         this.data = FilePersistentDataPump.readFromFile(this.filePath);
     }
 
-    public save(dataset: Dataset): void {
+    public save(dataset: Dataset): Promise<void> {
 
-        const json = JSON.stringify(dataset.json_d);
+        return new Promise( () => {
+            const json = JSON.stringify(dataset.json_d);
 
-        let fileDescriptorId = fs.openSync(path.join(__dirname, this.filePath),'r+');
-        fs.writeFileSync(path.join(__dirname, this.filePath), json);
-        fs.closeSync(fileDescriptorId);
-
-
+            let fileDescriptorId = fs.openSync(path.join(__dirname, this.filePath),'r+');
+            fs.writeFileSync(path.join(__dirname, this.filePath), json);
+            fs.closeSync(fileDescriptorId);
+        });
     }
 }

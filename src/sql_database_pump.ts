@@ -1,16 +1,32 @@
-import {DataRow, Dataset, DatasetEvent, DatasetEventType, PersistentDataPump} from "./dataset";
+import {DataRow, Dataset, DatasetEvent, DatasetEventType, DatasetRow, PersistentDataPump} from "./dataset";
 import {createClient} from '@supabase/supabase-js';
-import {Comparator, KeyedPersistentDataset} from "./persistent_dataset";
+import {KeyedPersistentDataset} from "./persistent_dataset";
+
+export enum PersistenceMode {
+    BY_FIELD,
+    BY_ROW,
+    BY_DATASET
+}
+
+export enum SaveMode {
+    OVERWRITE,
+    OPTIMISTIC
+}
 
 export class SQLDatabasePump implements PersistentDataPump<KeyedPersistentDataset> {
 
+    public Persistence_Mode = PersistenceMode.BY_FIELD;
+
     private readonly theSupabaseClient;
     private dataSet: Dataset;
-    private theSelectFunction : ( t: SQLDatabasePump ) => Promise<{data, count, error? }>;
+    private keys : string[];
+    private theSelectFunction : ( pump : SQLDatabasePump ) => Promise<{ data, count, error? }>;
+    private theUpdateFunction : ( pump: SQLDatabasePump ) => Promise<{ data, status, statusText }>;
 
     private delete;
-    public update : () => {data, error?};
     private insert;
+
+
 
     //public select : (from: string, select: string, keys?: string[], filter?: string[]) => { data, count, error? };
 
@@ -35,6 +51,14 @@ export class SQLDatabasePump implements PersistentDataPump<KeyedPersistentDatase
 
     public get select() : ( t: SQLDatabasePump ) => Promise<{ data, count, error? }> {
         return this.theSelectFunction;
+    }
+
+    public set update( updateFunction : ( t: SQLDatabasePump ) => Promise<{ data, status, statusText }>) {
+        this.theUpdateFunction = updateFunction;
+    }
+
+    public get update() : ( t : SQLDatabasePump ) => Promise<{ data, status, statusText }> {
+        return this.theUpdateFunction;
     }
 
 
@@ -67,6 +91,8 @@ export class SQLDatabasePump implements PersistentDataPump<KeyedPersistentDatase
 
     private initialisePump(dataset: KeyedPersistentDataset) {
 
+        let outerThis = this;
+
         if (this.dataSet == null || this.dataSet == undefined) {
 
             this.dataSet = dataset;
@@ -74,25 +100,73 @@ export class SQLDatabasePump implements PersistentDataPump<KeyedPersistentDatase
             if (dataset.source != null && dataset.source != undefined) {
 
                 let tableName = dataset.source.tableName;
+                this.keys = dataset.source.keys;
 
-                 this.select = async ( t : SQLDatabasePump ) => {
+                if (this.select == null || this.select == undefined) {
 
-                    let selectedFields = t.buildSelectedFields();
+                    this.select = ( aPump) => {
 
-                    return t.supabaseClient.from(tableName).select(selectedFields, {count: 'exact'});
+                        let selectedFields = aPump.buildSelectedFields();
+
+                        let query = aPump.supabaseClient.from(tableName).select(selectedFields, { count: 'exact'});
+
+                        // TODO Support paging
+
+                        return query;
+                    }
 
                 }
+
+
+
+                this.update = ( t : SQLDatabasePump ) => {
+
+                    if (this.Persistence_Mode == PersistenceMode.BY_FIELD) {
+
+                    }
+
+                    let currentRow : DatasetRow = dataset.navigator().current().value;
+
+                    let updatedFields : Object = {};
+
+                    for (let field of currentRow.entries()){
+
+                        if (field.isModified){
+                            updatedFields[field.name] = field.value;
+                        }
+                    }
+
+                    let updateQuery = t.supabaseClient.from(tableName).update(updatedFields);
+
+
+                    for (let key of this.keys){
+
+                        let theField = dataset.getField(key);
+
+                        updateQuery = updateQuery.eq(theField.name, theField.value)
+                    }
+
+                    updateQuery = updateQuery.select();
+
+                    return updateQuery;
+
+                }
+
+
 
             }
 
 
-            this.dataSet.subscribe((event: DatasetEvent<Dataset, DataRow>) => {
+            this.dataSet.subscribe(async (event: DatasetEvent<Dataset, DataRow>) => {
 
                 let affectedRow = event.detail;
+                let dataset = event.source;
 
-                let keyValues : object[] = [];
 
-                //for (let key of this.primaryKeys){
+
+                //let keyValues : object[] = [];
+
+                //for (let key of outerThis.keys){
                 //    keyValues[key] = affectedRow.getValue(key);
                 //}
 
@@ -106,8 +180,10 @@ export class SQLDatabasePump implements PersistentDataPump<KeyedPersistentDatase
 
                 if (event.eventType == DatasetEventType.ROW_UPDATED) {
 
-                    // Find the updated fields, amd write this back to the DB
-
+                    if (this.Persistence_Mode == PersistenceMode.BY_FIELD) {
+                        const { data, status, statusText } = await outerThis.update(this);
+                        console.log("Updated " + JSON.stringify(data) + ": STATUS - " + status);
+                    }
                 }
             });
         }

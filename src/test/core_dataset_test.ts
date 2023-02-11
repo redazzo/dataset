@@ -41,7 +41,7 @@ class Observer<SourceType, DetailType> {
         this.id = v.id;
         this.detail = v.detail;
         this.source = v.source;
-        this.count = this.count + 1;
+        this.count++;
     }
 
     public get observer(): (v: DatasetEvent<SourceType, DetailType>) => void {
@@ -198,7 +198,7 @@ test('Populate dataset test', () => {
     let {theObserver, dataSet} = populateDataset();
 
     expect(dataSet.rowCount).toBe(4);
-    expect(theObserver.count).toBe(4);
+    expect(theObserver.count).toBe(0);
 
     const firstRow = dataSet.getRow(dataSet.getRowIds()[0]);
     expect(firstRow != null && firstRow != undefined).toBe(true);
@@ -208,9 +208,14 @@ test('Populate dataset test', () => {
 
     expect(firstRow.getValue(FIELDNAME2)).toBe(AGE1);
 
+    const rowObserver = new Observer<DatasetRow, Field>();
+    firstRow.subscribe(rowObserver.observer);
+
+    expect(rowObserver.count).toBe(0);
     firstRow.setFieldValue(FIELDNAME2, "52");
+
     expect(firstRow.getValue(FIELDNAME2)).toBe("52");
-    expect(theObserver.count).toBe(5);
+    expect(rowObserver.count).toBe(1);
 
 
 })
