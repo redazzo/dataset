@@ -9,6 +9,9 @@ export enum FieldType {
     DATE
 }
 
+/**
+ * A FieldDescriptor is a description of a field in a dataset.
+ */
 export interface FieldDescriptor {
 
     get name(): string
@@ -16,6 +19,9 @@ export interface FieldDescriptor {
     get type(): FieldType
 }
 
+/**
+ * A Field is a value in a DataRow.
+ */
 export interface Field extends FieldDescriptor {
 
     get id(): string
@@ -25,31 +31,17 @@ export interface Field extends FieldDescriptor {
     subscribe(observer: (e: DatasetEvent<Field, Field>) => void): Subscription
 }
 
-export class DefaultFieldDescriptor implements FieldDescriptor {
-
-    constructor(
-        public readonly name: string,
-        public readonly type: FieldType) {
-    }
-
-}
-
+/**
+ * FieldDescriptors are a list of FieldDescriptors.
+ */
 export type FieldDescriptors = {
     name: string,
     type: FieldType
 }[];
 
-
-export class DatasetEvent<SourceType, DetailType> {
-
-    constructor(
-        public readonly id: string,
-        public readonly detail: DetailType,
-        public readonly source: SourceType,
-        public readonly eventType: DatasetEventType ) {
-    }
-}
-
+/**
+ * A DatasetEventType is an event that can occur on a dataset.
+ */
 export enum DatasetEventType {
 
     FIELD_VALUE_INSERTED,
@@ -66,37 +58,9 @@ export enum DatasetEventType {
 
 }
 
-export class TypedField implements Field {
-
-    public readonly id: string = uuidv4();
-    private readonly subject: Subject<DatasetEvent<Field, Field>> = new Subject<DatasetEvent<Field, Field>>();
-    private initialValue: string;
-
-
-    constructor(public readonly name: string, private fieldValue: string, public readonly type: FieldType) {
-    }
-
-    get value(): string {
-        return this.fieldValue;
-    }
-
-    set value(value: string) {
-        this.initialValue = this.fieldValue;
-        this.fieldValue = value;
-
-        this.subject.next(new DatasetEvent<Field, Field>(this.id, this, this, DatasetEventType.FIELD_VALUE_UPDATED));
-    }
-
-    get isModified() {
-        return !(this.fieldValue === this.initialValue);
-    }
-
-    public subscribe(observer: (e: DatasetEvent<Field, Field>) => void): Subscription {
-        return this.subject.subscribe(observer);
-    }
-
-}
-
+/**
+ * A DataRow is a row in a dataset.
+ */
 export interface DataRow {
 
     getField(fieldName: string): Field
@@ -109,106 +73,359 @@ export interface DataRow {
 
 }
 
+/**
+ * A DataPump loads data into a dataset.
+ */
 export interface DataPump<T extends Dataset> {
 
     load(dataset: T): Promise<void>
 }
 
+/**
+ * A PersistentDataPump loads data into a dataset and saves data from a dataset.
+ */
 export interface PersistentDataPump<T extends PersistentDataset> extends DataPump<PersistentDataset> {
 
     save(dataset: T): Promise<void>
 }
 
+/**
+ * A NavigableIterator is an iterator that can also navigate across a dataset.
+ */
+export interface NavigableIterator<T> extends IterableIterator<T>, DataRow {
 
-export class DatasetRow implements DataRow {
+    /**
+     * Navigates to the first row.
+     */
+    first(): IteratorResult<T>
 
-    public readonly id: string;
-    private readonly subject: Subject<DatasetEvent<DatasetRow, Field>> = new Subject<DatasetEvent<DatasetRow, Field>>();
-    private fieldDescriptors: Map<string, FieldDescriptor> = new Map<string, FieldDescriptor>();
-    private datasetFieldMap: Map<string, TypedField> = new Map<string, TypedField>();
+    /**
+     * Navigates back to a prior row.
+     */
+    prior(): IteratorResult<T>
 
-    constructor(fieldDescriptors?: FieldDescriptor[]) {
-        this.id = uuidv4();
+    /**
+     * Navigates to the next row.
+     */
+    current(): IteratorResult<T>
 
-        if (fieldDescriptors != null) {
-            fieldDescriptors.forEach(value => {
-                this.addFieldDescriptor(value);
-                this.addField(value);
-            });
-        }
-    }
+    /**
+     * Navigates to the last row.
+     */
+    last(): IteratorResult<T>
 
-    get typeHash(): number {
+    /**
+     * Resets the navigator to zeroth row.
+     */
+    reset(): void
 
-        return calculateTypeHash(this.fieldDescriptors);
+    /**
+     * Navigates directly to the entry at index.
+     * @param index
+     */
+    moveTo(index: number): IteratorResult<T>
 
-    }
+    /**
+     * Navigate to the entry identified by the key value.
+     * @param keys
+     */
+    find(keys: Map<string, number>): IterableIterator<T>
 
-    public addColumn(fieldName: string, type: FieldType) {
-        let fieldDescriptor = new DefaultFieldDescriptor(fieldName, type);
-        this.addFieldDescriptor(fieldDescriptor);
-        this.addField(fieldDescriptor);
-    }
-
-    public getField(fieldName: string): TypedField {
-        return this.datasetFieldMap.get(fieldName);
-    }
-
-    public getValue(fieldName: string): string {
-        return this.datasetFieldMap.get(fieldName).value;
-    }
-
-    public setFieldValue(fieldName: string, value: string): void {
-
-        let tf: TypedField = this.datasetFieldMap.get(fieldName);
-
-        if (tf == null || tf == undefined) {
-
-            let fieldDescriptor = this.fieldDescriptors.get(fieldName);
-
-            if (fieldDescriptor == null) {
-                throw new Error("No such field.");
-            } else {
-
-                tf = this.addField(fieldDescriptor);
-            }
-        }
-
-        tf.value = value;
-    }
-
-    public entries(): IterableIterator<TypedField> {
-        return this.datasetFieldMap.values();
-    }
-
-    public subscribe(observer: (v: DatasetEvent<DatasetRow, Field>) => void): Subscription {
-        return this.subject.subscribe(observer);
-    }
-
-    private addField(value: FieldDescriptor): TypedField {
-
-        let thisRow = this;
-        let tf = new TypedField(value.name, "", value.type);
-
-        // Make the row an observer of the field, and fire an event if the field value changes.
-        tf.subscribe((v: DatasetEvent<Field, Field>) => {
-
-            thisRow.subject.next(
-                new DatasetEvent<DatasetRow, Field>(thisRow.id, v.detail, thisRow, DatasetEventType.ROW_UPDATED)
-            );
-        });
-
-        this.datasetFieldMap.set(value.name, tf);
-        return tf;
-    }
-
-    private addFieldDescriptor(fieldDescription: FieldDescriptor): void {
-        this.fieldDescriptors.set(fieldDescription.name, fieldDescription);
-    }
-
+    /**
+     * Returns the index of the current row.
+     */
+    readonly index
 
 }
 
+/**
+ * A DatasetEvent is an event that occurs on a dataset.
+ */
+export class DatasetEvent<SourceType, DetailType> {
+
+    constructor(
+        public readonly id: string,
+        public readonly detail: DetailType,
+        public readonly source: SourceType,
+        public readonly eventType: DatasetEventType) {
+    }
+}
+
+/**
+ * A Dataset is a collection of rows, each of which is a collection of fields.
+ */
+export class Dataset implements DataRow {
+
+    private readonly subject: Subject<DatasetEvent<Dataset, DatasetRow>> = new Subject<DatasetEvent<Dataset, DatasetRow>>();
+    private readonly theFieldDescriptors: Map<string, FieldDescriptor> = new Map<string, FieldDescriptor>();
+    private theRows: Map<number, DatasetRow> = new Map<number, DatasetRow>();
+    private readonly datasetId: string;
+    private readonly typeHash: number;
+    private isQuiet: boolean = false;
+
+    private theNavigator: DatasetRowNavigator = null;
+
+    constructor(fieldDescriptors: FieldDescriptors);
+
+    constructor(fieldDescriptors: FieldDescriptors, rows?: DatasetRow[]) {
+        this.datasetId = uuidv4();
+
+        this.theFieldDescriptors = new Map<string, FieldDescriptor>();
+        for (let descriptor of fieldDescriptors) {
+
+            this.theFieldDescriptors.set(descriptor.name, descriptor);
+        }
+
+        this.typeHash = calculateTypeHash(this.theFieldDescriptors);
+
+        if (rows != null) {
+
+            let noRows = 0;
+            for (let row of rows) {
+
+                if (row.typeHash != this.typeHash) {
+                    throw new Error("Rows in a dataset must have identical fields and field types.");
+                }
+
+                this.theRows.set(noRows++, row);
+            }
+        }
+    }
+
+    public get quiet() {
+        return this.isQuiet;
+    }
+
+    /**
+     * Sets the quiet flag. If true, no events are emitted.
+     * @param b
+     */
+    public set quiet(b) {
+        if (b) {
+            console.log("Quiet");
+        } else {
+            console.log("Loud");
+        }
+        this.isQuiet = b;
+    }
+
+    /**
+     * Returns a clone of the field descriptors
+     */
+    get fieldDescriptors(): Map<string, FieldDescriptor> {
+
+        let descriptors = new Map<string, FieldDescriptor>();
+
+        for (let aDescriptor of this.theFieldDescriptors.values()) {
+
+            descriptors.set(aDescriptor.name, aDescriptor);
+        }
+
+        return descriptors;
+    }
+
+    public get id(): string {
+        return this.datasetId;
+    }
+
+    public get rowCount(): number {
+        return this.theRows.size;
+    }
+
+    public get json_d(): {} {
+
+        let data = [];
+        for (let row of this.iterator()) {
+
+            let ro = {}
+            for (let field of row.entries()) {
+                ro[field.name] = field.value;
+            }
+
+            data.push(ro);
+        }
+
+        return data;
+
+    }
+
+    public iterator(): IterableIterator<DatasetRow> {
+        return new DatasetRowNavigator(this.theRows);
+    }
+
+    public navigator(): NavigableIterator<DatasetRow> {
+
+        if (this.theNavigator == null) {
+            this.theNavigator = new DatasetRowNavigator(this.theRows);
+        }
+        return this.theNavigator;
+    }
+
+    /*public addColumn(fieldName: string, type: FieldType) {
+
+        let fd = this.theFieldDescriptors.get(fieldName);
+
+        if (!(fd == null || fd == undefined)) {
+            throw new Error("A column with that field name already exists!");
+        }
+
+        fd = new DefaultFieldDescriptor(fieldName, type);
+        this.theFieldDescriptors.set(fieldName, fd);
+
+    }*/
+
+    public getField(fieldName: string): Field {
+        return this.navigator().getField(fieldName);
+
+    }
+
+    public getValue(fieldName: string): string {
+        return this.navigator().getValue(fieldName);
+
+    }
+
+    public setFieldValue(fieldName: string, value: string): void {
+        this.navigator().setFieldValue(fieldName, value);
+    }
+
+    public getRow(rowId: string | number): DatasetRow {
+
+        if (this.theRows.size == 0) return null;
+
+        if (typeof rowId == "number") {
+            return this.theRows.get(rowId);
+        }
+
+        for (let row of this.theRows.values()) {
+
+            if (row.id === rowId) {
+                return row;
+            }
+
+        }
+        return null;
+    }
+
+    public getRowIds(): string[] {
+
+        let rowIds = new Array<string>();
+
+        for (let row of this.theRows.values()) {
+            rowIds.push(row.id);
+        }
+
+        return rowIds;
+    }
+
+    public addRow(row?: DatasetRow): DatasetRow {
+
+        let datasetThis = this;
+
+        if (row == null || row == undefined) {
+
+            let values = this.theFieldDescriptors.values();
+
+            let fieldDescriptorsTmp = new Array<DefaultFieldDescriptor>();
+            for (let value of values) {
+
+                fieldDescriptorsTmp.push(value);
+
+            }
+            row = new DatasetRow(fieldDescriptorsTmp);
+
+        }
+
+        // Make the dataset an observer of the row, and fire an event if there is a change to the row
+        row.subscribe((v) => {
+
+            if (this.quiet) return;
+
+            datasetThis.subject.next(new DatasetEvent<Dataset, DatasetRow>(datasetThis.datasetId, row, datasetThis, DatasetEventType.ROW_UPDATED));
+        });
+
+        let noRows = this.theRows.size
+        this.theRows.set(noRows, row);
+        this.navigator().last();
+        if (!this.quiet) this.subject.next(new DatasetEvent<Dataset, DatasetRow>(this.datasetId, row, this, DatasetEventType.ROW_INSERTED));
+        return row;
+    }
+
+    public deleteRow(rowId: string | number): DatasetRow {
+        /*
+        Deletion is an expensive operation as the order of the dataset is managed via a map of integers to rows. Removal
+        of a row subsequently needs the map to be partially rebuilt.
+         */
+
+        let maxIndex = this.theRows.size - 1;
+
+        let theRow = null;
+        let key = -1;
+        if (typeof rowId === "number") {
+
+            theRow = this.theRows.get(rowId);
+            key = rowId;
+
+        } else {
+
+            for (let aKey of this.theRows.keys()) {
+
+                let aRow = this.theRows.get(aKey);
+
+                if (aRow.id === rowId) {
+                    theRow = aRow;
+                    key = aKey;
+                }
+            }
+        }
+
+
+        if (theRow == undefined || theRow == null) {
+            return null;
+        }
+
+        let lastRowDeleted = key == this.theRows.size - 1;
+        this.theRows.delete(key);
+
+
+        // Remap the remainder
+        if (!lastRowDeleted) {
+            for (let i = key; i < maxIndex; i++) {
+                let nextRow = this.theRows.get(i + 1);
+                this.theRows.set(i, nextRow);
+            }
+            this.theRows.delete(this.theRows.size - 1);
+
+        }
+        this.navigator().moveTo(key - 1);
+
+        if (!this.quiet) this.subject.next(new DatasetEvent<Dataset, DatasetRow>(this.datasetId, theRow, this, DatasetEventType.ROW_DELETED));
+    }
+
+    public subscribe(observer: (v: DatasetEvent<Dataset, DataRow>) => void): Subscription {
+        return this.subject.subscribe(observer);
+    }
+
+    public async load(pop: DataPump<Dataset>) {
+
+        await this.clear();
+
+        console.log("Loading dataset");
+        this.quiet = true;
+        await pop.load(this).then(() => {
+            this.quiet = false
+        });
+    }
+
+    public async clear() {
+        this.theRows.clear();
+        //this.theFieldDescriptors.clear();
+    }
+
+}
+
+/**
+ * The DatasetRowNavigator class is an implementation of the NavigableIterator interface. It is used to navigate across the rows of a dataset.
+ */
 class DatasetRowNavigator implements NavigableIterator<DatasetRow> {
 
     private iterationIndex: number;
@@ -273,9 +490,9 @@ class DatasetRowNavigator implements NavigableIterator<DatasetRow> {
         }
     }
 
-    public last() : IteratorResult<DatasetRow> {
+    public last(): IteratorResult<DatasetRow> {
 
-        let maxIndex = findMaxIndex(this.datasetRows);
+        let maxIndex = this.datasetRows.size - 1;
 
         this.theCurrentRow = this.datasetRows.get(maxIndex);
 
@@ -283,7 +500,6 @@ class DatasetRowNavigator implements NavigableIterator<DatasetRow> {
             value: this.theCurrentRow
         }
     }
-
 
 
     public next(...args: [] | [undefined]): IteratorResult<DatasetRow> {
@@ -305,9 +521,9 @@ class DatasetRowNavigator implements NavigableIterator<DatasetRow> {
         }
     }
 
-    public moveTo(index : number) : IteratorResult<DatasetRow> {
+    public moveTo(index: number): IteratorResult<DatasetRow> {
 
-        if (this.datasetRows.size <= 0){
+        if (this.datasetRows.size <= 0) {
             this.theCurrentRow = undefined;
             return {
                 value: this.theCurrentRow,
@@ -337,24 +553,45 @@ class DatasetRowNavigator implements NavigableIterator<DatasetRow> {
 
     }
 
-    public find(keys : string[]) : IteratorResult<DatasetRow> {
+    public find(keys: Map<string, number>): IterableIterator<DatasetRow> {
 
-        if (this.datasetRows.size <= 0){
+
+
+        if (this.datasetRows.size <= 0) {
             this.theCurrentRow = undefined;
             return {
-                value: this.theCurrentRow,
-                done: true
+                next(): IteratorResult<DatasetRow> {
+                    return {
+                        value: undefined,
+                        done: true
+                    }
+                },
+
+                [Symbol.iterator](): IterableIterator<DatasetRow> {
+                    return this;
+                }
             }
         }
 
-        for (let row of this.datasetRows.values()){
-            // TODO
+        const rows: DatasetRow[] = [];
+
+        for (let row of this.datasetRows.values()) {
+
+            for (let key of keys.keys()) {
+                if (+row.getField(key).value != keys.get(key)) {
+                    continue;
+                }
+
+                rows.push(row);
+            }
+
         }
 
-        return null;
+        return rows.values();
     }
 
     public getField(fieldName: string): Field {
+        console.log("rows : " + this.datasetRows.size);
         if (this.datasetRows.size == 0) return undefined;
 
         return this.theCurrentRow.getField(fieldName);
@@ -377,327 +614,56 @@ class DatasetRowNavigator implements NavigableIterator<DatasetRow> {
 
 }
 
-function findMaxIndex( m : Map<number, DatasetRow>) {
-    //let maxIndex = 0;
+/**
+ * Default implementation of the FieldDescriptor interface. It is used to describe a field in a dataset.
+ */
+export class DefaultFieldDescriptor implements FieldDescriptor {
 
-    // TODO Consider creating a map that keeps track of the maximum index if performance becomes an issue.
-    //for (let key of m.keys()) {
-    //    if (key > maxIndex) maxIndex = key;
-    //}
-    //return maxIndex;
-
-    return m.size - 1;
-}
-
-export interface NavigableIterator<T> extends IterableIterator<T>, DataRow {
-
-    first(): IteratorResult<T>
-
-    /**
-     * Navigates back to a prior result.
-     */
-    prior(): IteratorResult<T>
-
-    current(): IteratorResult<T>
-
-    last(): IteratorResult<T>
-
-    reset(): void
-
-    /**
-     * Navigates directly to the entry at index.
-     * @param index
-     */
-    moveTo(index : number) : IteratorResult<T>
-
-    /**
-     * Navigate to the entry identified by the key value.
-     * @param keys
-     */
-    find(keys : string[]) : IteratorResult<T>
-
-    readonly index
+    constructor(
+        public readonly name: string,
+        public readonly type: FieldType) {
+    }
 
 }
 
-export class Dataset implements DataRow {
+/**
+ *
+ */
+export class TypedField implements Field {
 
-    private readonly subject: Subject<DatasetEvent<Dataset, DatasetRow>> = new Subject<DatasetEvent<Dataset, DatasetRow>>();
-    private readonly theFieldDescriptors: Map<string, FieldDescriptor> = new Map<string, FieldDescriptor>();
-    private theRows: Map<number, DatasetRow> = new Map<number, DatasetRow>();
-    private readonly datasetId: string;
-    private readonly typeHash: number;
-    private isQuiet : boolean = false;
+    public readonly id: string = uuidv4();
+    private readonly subject: Subject<DatasetEvent<Field, Field>> = new Subject<DatasetEvent<Field, Field>>();
+    private initialValue: string;
 
-    private theNavigator: DatasetRowNavigator = null;
 
-    constructor(fieldDescriptors: FieldDescriptors);
-
-    constructor(fieldDescriptors: FieldDescriptors, rows?: DatasetRow[]) {
-        this.datasetId = uuidv4();
-
-        this.theFieldDescriptors = new Map<string, FieldDescriptor>();
-        for (let descriptor of fieldDescriptors) {
-
-            this.theFieldDescriptors.set(descriptor.name, descriptor);
-        }
-
-        this.typeHash = calculateTypeHash(this.theFieldDescriptors);
-
-        if (rows != null) {
-
-            let noRows = 0;
-            for (let row of rows) {
-
-                if (row.typeHash != this.typeHash) {
-                    throw new Error("Rows in a dataset must have identical fields and field types.");
-                }
-
-                this.theRows.set(noRows++, row);
-            }
-        }
+    constructor(public readonly name: string, private fieldValue: string, public readonly type: FieldType) {
     }
 
-    public get quiet() {
-        return this.isQuiet;
+    get value(): string {
+        return this.fieldValue;
     }
 
-    public set quiet(b) {
-        if (b) {
-            console.log("Quiet");
-        } else {
-            console.log("Loud");
-        }
-        this.isQuiet = b;
+    set value(value: string) {
+        this.initialValue = this.fieldValue;
+        this.fieldValue = value;
+
+        this.subject.next(new DatasetEvent<Field, Field>(this.id, this, this, DatasetEventType.FIELD_VALUE_UPDATED));
     }
 
-    /**
-     * Returns a clone of the field descriptors
-     */
-    get fieldDescriptors(): Map<string, FieldDescriptor> {
-
-        let descriptors = new Map<string, FieldDescriptor>();
-
-        for (let aDescriptor of this.theFieldDescriptors.values()) {
-
-            descriptors.set(aDescriptor.name, aDescriptor);
-        }
-
-        return descriptors;
+    get isModified() {
+        return !(this.fieldValue === this.initialValue);
     }
 
-    get id(): string {
-        return this.datasetId;
-    }
-
-    get rowCount(): number {
-        return this.theRows.size;
-    }
-
-    public get json(): {} {
-
-        let dso = {};
-        for (let row of this.iterator()) {
-
-            let ro = {}
-            for (let field of row.entries()) {
-                ro[field.name] = field.value;
-            }
-
-            dso[row.id] = ro;
-        }
-
-        return dso;
-
-    }
-
-    public get json_d(): {} {
-
-        let data = [];
-        for (let row of this.iterator()) {
-
-            let ro = {}
-            for (let field of row.entries()) {
-                ro[field.name] = field.value;
-            }
-
-            data.push(ro);
-        }
-
-        return data;
-
-    }
-
-    public iterator(): IterableIterator<DatasetRow> {
-        return new DatasetRowNavigator(this.theRows);
-    }
-
-    public navigator(): NavigableIterator<DatasetRow> {
-
-        if (this.theNavigator == null) {
-            this.theNavigator = new DatasetRowNavigator(this.theRows);
-        }
-        return this.theNavigator;
-    }
-
-    public addColumn(fieldName: string, type: FieldType) {
-
-        let fd = this.theFieldDescriptors.get(fieldName);
-
-        if (!(fd == null || fd == undefined)) {
-            throw new Error("A column with that field name already exists!");
-        }
-
-        fd = new DefaultFieldDescriptor(fieldName, type);
-        this.theFieldDescriptors.set(fieldName, fd);
-
-    }
-
-    public getField(fieldName: string): Field {
-        return this.navigator().getField(fieldName);
-
-    }
-
-    public getValue(fieldName: string): string {
-        return this.navigator().getValue(fieldName);
-
-    }
-
-    public setFieldValue(fieldName: string, value: string): void {
-        this.navigator().setFieldValue(fieldName, value);
-    }
-
-    public getRow(rowId: string | number): DatasetRow {
-
-        if (this.theRows.size == 0) return null;
-
-        if (typeof rowId == "number"){
-            return this.theRows.get(rowId);
-        }
-
-        for (let row of this.theRows.values()) {
-
-            if (row.id === rowId) {
-                return row;
-            }
-
-        }
-        return null;
-    }
-
-    public getRowIds(): string[] {
-
-        let rowIds = new Array<string>();
-
-        for (let row of this.theRows.values()) {
-            rowIds.push(row.id);
-        }
-
-        return rowIds;
-    }
-
-    public addRow(row?: DatasetRow): DatasetRow {
-
-        let datasetThis = this;
-
-        if (row == null || row == undefined) {
-
-            let values = this.theFieldDescriptors.values();
-
-            let fieldDescriptorsTmp = new Array<DefaultFieldDescriptor>();
-            for (let value of values) {
-
-                fieldDescriptorsTmp.push(value);
-
-            }
-            row = new DatasetRow(fieldDescriptorsTmp);
-
-        }
-
-        // Make the dataset an observer of the row, and fire an event if there is a change to the row
-        row.subscribe((v) => {
-
-            if (this.quiet) return;
-
-            datasetThis.subject.next(new DatasetEvent<Dataset, DatasetRow>(datasetThis.datasetId, row, datasetThis,DatasetEventType.ROW_UPDATED));
-        });
-
-        let noRows = this.theRows.size
-        this.theRows.set(noRows, row);
-        this.navigator().last();
-        if (!this.quiet) this.subject.next(new DatasetEvent<Dataset, DatasetRow>(this.datasetId, row, this, DatasetEventType.ROW_INSERTED));
-        return row;
-    }
-
-    public deleteRow(rowId : string | number) : DatasetRow {
-        /*
-        Deletion is an expensive operation as the order of the dataset is managed via a map of integers to rows. Removal
-        of a row subsequently needs the map to be partially rebuilt.
-         */
-
-        let maxIndex = this.theRows.size - 1;
-
-        let theRow = null;
-        let key = -1;
-        if (typeof rowId === "number" ){
-
-            theRow = this.theRows.get(rowId);
-            key = rowId;
-
-        } else {
-
-            for (let aKey of this.theRows.keys()) {
-
-                let aRow = this.theRows.get(aKey);
-
-                if (aRow.id === rowId) {
-                    theRow = aRow;
-                    key = aKey;
-                }
-            }
-        }
-
-
-        if (theRow == undefined || theRow == null){
-            return null;
-        }
-
-        let lastRowDeleted = key == this.theRows.size - 1;
-        this.theRows.delete(key);
-
-
-        // Remap the remainder
-        if (!lastRowDeleted){
-            for (let i=key; i < maxIndex; i++){
-                let nextRow = this.theRows.get(i + 1);
-                this.theRows.set(i, nextRow);
-            }
-            this.theRows.delete(this.theRows.size - 1);
-
-        }
-        this.navigator().moveTo(key - 1);
-
-        if (!this.quiet) this.subject.next(new DatasetEvent<Dataset, DatasetRow>(this.datasetId, theRow, this, DatasetEventType.ROW_DELETED));
-    }
-
-    public subscribe(observer: (v: DatasetEvent<Dataset, DataRow>) => void): Subscription {
+    public subscribe(observer: (e: DatasetEvent<Field, Field>) => void): Subscription {
         return this.subject.subscribe(observer);
     }
 
-    public async load(pop: DataPump<Dataset>) {
-
-        console.log("Loading dataset");
-        this.quiet = true;
-        await pop.load(this).then(() => { this.quiet = false });
-    }
-
 }
 
-
 /**
- * Returns a hash from the field descriptors. A bit crap - but good enough.
+ * Returns a hash value for the given field descriptors.
  */
-function calculateTypeHash(descriptors: Map<string, FieldDescriptor>): number {
+export function calculateTypeHash(descriptors: Map<string, FieldDescriptor>): number {
 
     let hash = 0;
 
@@ -723,6 +689,119 @@ function calculateTypeHash(descriptors: Map<string, FieldDescriptor>): number {
 
 }
 
+/**
+ * The DatasetRow class represents a row in a dataset.
+ */
+export class DatasetRow implements DataRow {
+
+    public readonly id: string;
+    private readonly subject: Subject<DatasetEvent<DatasetRow, Field>> = new Subject<DatasetEvent<DatasetRow, Field>>();
+    private fieldDescriptors: Map<string, FieldDescriptor> = new Map<string, FieldDescriptor>();
+    private datasetFieldMap: Map<string, TypedField> = new Map<string, TypedField>();
+    private modified: boolean = false;
+
+    constructor(fieldDescriptors?: FieldDescriptor[]) {
+        this.id = uuidv4();
+
+        if (fieldDescriptors != null) {
+            fieldDescriptors.forEach(value => {
+                this.addFieldDescriptor(value);
+                this.addField(value);
+            });
+        }
+    }
+
+    get isModified(): boolean {
+        return this.modified;
+    }
+
+    get typeHash(): number {
+
+        return calculateTypeHash(this.fieldDescriptors);
+
+    }
+
+    /**
+     * Adds a field to the row.
+     * @param fieldName
+     * @param type
+     */
+    public addColumn(fieldName: string, type: FieldType) {
+        let fieldDescriptor = new DefaultFieldDescriptor(fieldName, type);
+        this.addFieldDescriptor(fieldDescriptor);
+        this.addField(fieldDescriptor);
+    }
+
+    public getField(fieldName: string): TypedField {
+        return this.datasetFieldMap.get(fieldName);
+    }
+
+    public getValue(fieldName: string): string {
+        return this.datasetFieldMap.get(fieldName).value;
+    }
+
+    public setFieldValue(fieldName: string, value: string): void {
+
+        let tf: TypedField = this.datasetFieldMap.get(fieldName);
+
+        if (tf == null || tf == undefined) {
+
+            let fieldDescriptor = this.fieldDescriptors.get(fieldName);
+
+            if (fieldDescriptor == null) {
+                throw new Error("No such field.");
+            } else {
+
+                tf = this.addField(fieldDescriptor);
+            }
+        }
+
+        tf.value = value;
+        this.modified = true;
+    }
+
+    /**
+     * Returns an iterator for the fields in the row.
+     */
+    public entries(): IterableIterator<TypedField> {
+        return this.datasetFieldMap.values();
+    }
+
+    /**
+     * Subscribes to the row for changes.
+     * @param observer
+     */
+    public subscribe(observer: (v: DatasetEvent<DatasetRow, Field>) => void): Subscription {
+        return this.subject.subscribe(observer);
+    }
+
+    private addField(value: FieldDescriptor): TypedField {
+
+        let thisRow = this;
+        let tf = new TypedField(value.name, "", value.type);
+
+        // Make the row an observer of the field, and fire an event if the field value changes.
+        tf.subscribe((v: DatasetEvent<Field, Field>) => {
+
+            thisRow.subject.next(
+                new DatasetEvent<DatasetRow, Field>(thisRow.id, v.detail, thisRow, DatasetEventType.ROW_UPDATED)
+            );
+        });
+
+        this.datasetFieldMap.set(value.name, tf);
+        return tf;
+    }
+
+    private addFieldDescriptor(fieldDescription: FieldDescriptor): void {
+        this.fieldDescriptors.set(fieldDescription.name, fieldDescription);
+    }
+
+
+}
+
+/**
+ * The ObjectArrayDataPump class is used to load data from an array of objects into a dataset.
+ */
 export class ObjectArrayDataPump implements DataPump<Dataset> {
 
 
@@ -730,7 +809,6 @@ export class ObjectArrayDataPump implements DataPump<Dataset> {
     }
 
     public load(dataset: Dataset): Promise<void> {
-
         
         return new Promise((resolve, reject) => {
             for (let rowValues of this.data) {

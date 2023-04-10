@@ -2,10 +2,7 @@ import {
     Dataset,
     DatasetRow,
     DefaultFieldDescriptor,
-    DefaultObserver,
-    Field,
-    FieldDescriptor,
-    FieldType,
+    DefaultObserver, Field, FieldDescriptor, FieldType,
     ObjectArrayDataPump,
     TypedField
 } from '../dataset'

@@ -1,4 +1,8 @@
-import {DataPump, Dataset, DatasetRow, FieldDescriptors, ObjectArrayDataPump, PersistentDataPump} from "./dataset";
+import {
+    DataPump,
+    Dataset, FieldDescriptors,
+    ObjectArrayDataPump, PersistentDataPump
+} from "./dataset";
 import * as fs from "fs";
 import * as path from "path";
 
