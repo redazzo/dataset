@@ -407,7 +407,7 @@ export class Dataset implements DataRow {
 
     public async load(pop: DataPump<Dataset>) {
 
-        await this.clear();
+        this.clear();
 
         console.log("Loading dataset");
         this.quiet = true;
@@ -416,7 +416,7 @@ export class Dataset implements DataRow {
         });
     }
 
-    public async clear() {
+    public clear() {
         this.theRows.clear();
         //this.theFieldDescriptors.clear();
     }
