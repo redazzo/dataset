@@ -16,7 +16,9 @@ export enum Comparator {
 
 }
 
-
+/**
+ * A persistent dataset is a dataset that can be saved and loaded from a persistent data source.
+ */
 export class PersistentDataset extends Dataset {
 
     constructor(fieldDescriptors: FieldDescriptors, protected readonly persistentDataPump : PersistentDataPump<PersistentDataset>) {
@@ -32,6 +34,9 @@ export class PersistentDataset extends Dataset {
     }
 }
 
+/**
+ * A keyed persistent dataset is a persistent dataset that has rows that can be identified by a key.
+ */
 export class KeyedPersistentDataset extends PersistentDataset {
 
     constructor(
@@ -73,6 +78,9 @@ export class KeyedPersistentDataset extends PersistentDataset {
 
 }
 
+/**
+ * A FilePersistentDataPump is a data pump that can load and save data from a file.
+ */
 export class FilePersistentDataPump<T extends PersistentDataset> extends ObjectArrayDataPump implements PersistentDataPump<T> {
 
     constructor(private filePath : string){

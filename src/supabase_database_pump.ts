@@ -9,6 +9,11 @@ export enum PersistenceMode {
     BY_DATASET
 }
 
+export enum AUTO_KEY {
+    FALSE,
+    TRUE
+}
+
 export enum SaveMode {
     OVERWRITE,
     OPTIMISTIC
@@ -20,20 +25,27 @@ export enum SaveMode {
 export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDataset> {
 
     public Persistence_Mode = PersistenceMode.BY_FIELD;
+    public Auto_Key = AUTO_KEY.TRUE;
+
 
     private readonly theSupabaseClient;
     private dataSet: Dataset;
     private keys: string[];
+    private theTableName: string;
     private selectFunction: (pump: SupabaseDataPump) => Promise<{ data, count, error? }>;
     private updateFunction: (pump: SupabaseDataPump) => Promise<{ data, status, statusText }>;
     private deleteFunction: (pump: SupabaseDataPump) => Promise<{ data, status, statusText }>;
     private insertFunction: (pump: SupabaseDataPump) => Promise<{ data, status, statusText }>;
 
 
-    constructor(credentials: { url: string, key: string }, public useTableSource: boolean) {
+    constructor(credentials: { url: string, key: string }) {
         this.theSupabaseClient = createClient(credentials.url, credentials.key);
 
 
+    }
+
+    public get tableName(): string {
+        return this.theTableName;
     }
 
     public get supabaseClient() {
@@ -54,6 +66,14 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
 
     public get update(): (t: SupabaseDataPump) => Promise<{ data, status, statusText }> {
         return this.updateFunction;
+    }
+
+    public get insert(): (t: SupabaseDataPump) => Promise<{ data, status, statusText }> {
+        return this.insertFunction;
+    }
+
+    public set insert(insertFunction: (t: SupabaseDataPump) => Promise<{ data, status, statusText }>) {
+        this.insertFunction = insertFunction;
     }
 
 
@@ -99,7 +119,7 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
 
         this.dataSet = dataset;
 
-        let tableName = dataset.source.tableName;
+        this.theTableName = dataset.source.tableName;
         this.keys = dataset.source.keys;
 
         if (this.select == null || this.select == undefined) {
@@ -108,7 +128,7 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
 
                 let selectedFields = aPump.buildSelectedFields();
 
-                let query = aPump.supabaseClient.from(tableName).select(selectedFields, {count: 'exact'});
+                let query = aPump.supabaseClient.from(this.theTableName).select(selectedFields, {count: 'exact'});
 
                 // TODO Support paging
 
@@ -117,15 +137,10 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
 
         }
 
-
-        // The update function finds the fields that have been modified and updates them
+        // Prepare the update function
         this.update = (t: SupabaseDataPump) => {
 
             console.log("Updating row");
-
-            if (this.Persistence_Mode == PersistenceMode.BY_FIELD) {
-
-            }
 
             // TODO Support optimistic locking and other modes
             let currentRow: DatasetRow = dataset.navigator().current().value;
@@ -139,7 +154,7 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
                 }
             }
 
-            let updateQuery = t.supabaseClient.from(tableName).update(updatedFields);
+            let updateQuery = t.supabaseClient.from(this.theTableName).update(updatedFields);
 
             for (let key of this.keys) {
 
@@ -154,8 +169,35 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
 
         }
 
+        // Prepare the insert function
+        this.insert = (t: SupabaseDataPump) => {
 
-        // outer is used to get around the fact that the "this" keyword will likely return the wrong instance
+                console.log("Inserting row");
+
+                // TODO Support optimistic locking and other modes
+                let currentRow: DatasetRow = dataset.navigator().current().value;
+
+                let fields: Object = {};
+
+                for (let field of currentRow.entries()) {
+
+
+                    fields[field.name] = field.value;
+                }
+
+
+
+                let updateQuery = t.supabaseClient.from(this.theTableName).insert(fields);
+
+                return updateQuery;
+
+        }
+
+
+
+        // Subscribes to the dataset so that we can update the DB when the dataset is updated
+
+        // outer is used to get around the fact that the "this" keyword returns the wrong instance
         // when used in the async function
         let outerThis = this;
         this.dataSet.subscribe(async (event: DatasetEvent<Dataset, DataRow>) => {
@@ -171,6 +213,10 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
             // If the row has been inserted, then we need to insert it into the DB
             if (event.eventType == DatasetEventType.ROW_INSERTED) {
                 // Insert row into DB
+                if (this.Persistence_Mode == PersistenceMode.BY_FIELD) {
+                    const {data, status, statusText} = await outerThis.insert(this);
+                    console.log("Inserted " + JSON.stringify(data) + ": STATUS - " + status);
+                }
             }
 
             // If the row has been updated, then we need to update the DB

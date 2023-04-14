@@ -129,7 +129,7 @@ export interface NavigableIterator<T> extends IterableIterator<T>, DataRow {
      * Navigate to the entry identified by the key value.
      * @param keys
      */
-    find(keys: Map<string, number>): IterableIterator<T>
+    moveToFind(keys: Map<string, number>): IterableIterator<T>
 
     /**
      * Returns the index of the current row.
@@ -553,7 +553,7 @@ class DatasetRowNavigator implements NavigableIterator<DatasetRow> {
 
     }
 
-    public find(keys: Map<string, number>): IterableIterator<DatasetRow> {
+    public moveToFind(keys: Map<string, number>): IterableIterator<DatasetRow> {
 
 
 
@@ -575,17 +575,30 @@ class DatasetRowNavigator implements NavigableIterator<DatasetRow> {
 
         const rows: DatasetRow[] = [];
 
-        for (let row of this.datasetRows.values()) {
+        let firstResultRow : DatasetRow = null;
+        let index = -1;
+        for (let value of this.datasetRows.entries()) {
 
             for (let key of keys.keys()) {
+                let row = value[1]
+
                 if (+row.getField(key).value != keys.get(key)) {
                     continue;
                 }
 
+
+                if (firstResultRow == null) {
+                    index = value[0];
+                    firstResultRow = row;
+                }
                 rows.push(row);
             }
 
         }
+
+        // Move to the first row of the result set
+        this.theCurrentRow = firstResultRow;
+        this.iterationIndex = index;
 
         return rows.values();
     }

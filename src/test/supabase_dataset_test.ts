@@ -1,4 +1,4 @@
-import {SupabaseDataPump} from "../sql_database_pump";
+import {SupabaseDataPump} from "../supabase_database_pump";
 import {KeyedPersistentDataset} from "../persistent_dataset";
 import {FieldType} from "../dataset";
 import * as assert from "assert";
@@ -13,7 +13,27 @@ const MAKE = "make"
 const MODEL = "model"
 const YEAR = "year"
 const ID = "id"
-const COLUMN_NAMES_AS_STRING = MAKE + "," + MODEL+ "," + YEAR
+
+
+const test_data = {
+    1: {
+        make: "Chevrolet",
+        model: "Camaro",
+        year: 1967
+    },
+    2: {
+        make: "Ford",
+        model: "Mustang",
+        year: 1965
+    },
+    3: {
+        make: "Dodge",
+        model: "Charger",
+        year: 1969
+    }
+
+}
+
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 
@@ -23,11 +43,7 @@ function createDataset() {
     //}
     //.filter(this.sqlParameters?.filter);
 
-    let supabaseDatasetPump = new SupabaseDataPump(credentials, true);
-
-    supabaseDatasetPump.select = () => {
-        return supabaseDatasetPump.supabaseClient.from(TABLE_NAME).select();
-    }
+    let supabaseDatasetPump = new SupabaseDataPump(credentials);
 
     const columnTypes = [
         {
@@ -72,69 +88,81 @@ test('Load Dataset', async () => {
 /**
  * Test that the dataset can be updated and reloaded.
  */
-test( "Update and Reset",  async () => {
+test("Update and Reset", async () => {
 
-    let dataset = createDataset();
-    await dataset.load();
+    // Cycle through the dataset and update and reset each row
 
-    console.log(dataset.json_d);
+    for (let i = 1; i <= 3; i++) {
 
-    // Find the row with id = 1
-    let foundRows = dataset.navigator().find(new Map([["id",1]]));
-    let theRow = foundRows.next().value;
+        let dataset = createDataset();
+        await dataset.load();
 
-    // Find the original values
-    let originalValue = theRow.getField("make").value;
-    let id = dataset.getField("id").value;
+        // Find the row with id = i
+        dataset.navigator().moveToFind(new Map([[ID, i]]));
 
-    // Ensure that the values are correct
-    expect(originalValue).toBe("Chevrolet");
-    expect(id).toBe(1);
+        // Find the original values
+        let originalValue = dataset.getField(MAKE).value;
+        let id = dataset.getField(ID).value;
 
-    // Change the value
-    dataset.setFieldValue("make","LALALAND");
+        // Ensure that the values are correct
+        expect(originalValue).toBe(test_data[i].make);
+        expect(id).toBe(i);
 
-    // Wait for database to be updated
-    await sleep(1000);
+        // Change the value
+        dataset.setFieldValue(MAKE, "LALALAND");
 
-    // Reload the dataset
-    await dataset.load();
-    console.log(dataset.json_d);
+        // Wait for database to be updated
+        await sleep(1000);
 
-    // Find the row with id = 1 again
-    foundRows = dataset.navigator().find(new Map([["id",1]]));
+        // Reload the dataset
+        await dataset.load();
 
-    theRow = foundRows.next().value;
+        // Find the row with id = i again
+        dataset.navigator().moveToFind(new Map([[ID, i]]));
 
-    // Find the new values
-    let newValue = theRow.getField("make").value;
-    let newId = theRow.getField("id").value;
+        // Find the new values
+        let newValue = dataset.getField(MAKE).value;
 
-    // Ensure that the values are correct i.e. the update was successful
-    expect(newId).toBe(id);
-    expect(newValue).toBe("LALALAND");
+        // Ensure that the value has been changed
+        expect(newValue).toBe("LALALAND");
 
-    // Reset the value
-    dataset.setFieldValue("make",originalValue);
+        // Reset the value
+        dataset.setFieldValue(MAKE, test_data[i].make);
 
-    await sleep(1000);
+        // Wait for database to be updated
+        await sleep(1000);
 
-    await dataset.load();
-    console.log(dataset.json_d);
+        // Reload the dataset
+        await dataset.load();
 
-    await sleep(1000);
+        // Find the row with id = i again
+        dataset.navigator().moveToFind(new Map([[ID, i]]));
 
-});
+        // Find the new values
+        newValue = dataset.getField(MAKE).value;
+
+        // Ensure that the value has been changed back
+        expect(newValue).toBe(test_data[i].make);
+
+        await sleep(1000);
+    }
+
+    },20000);
 
 class Waiter {
     private timeout: any
+
     constructor() {
         this.waitLoop()
     }
-    private waitLoop():void {
-        this.timeout = setTimeout(() => { this.waitLoop() }, 100 * 1000)
+
+    private waitLoop(): void {
+        this.timeout = setTimeout(() => {
+            this.waitLoop()
+        }, 100 * 1000)
     }
-    okToQuit():void {
+
+    okToQuit(): void {
         clearTimeout(this.timeout)
     }
 }
