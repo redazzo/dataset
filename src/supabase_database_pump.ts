@@ -1,19 +1,42 @@
-import {DataRow, Dataset, DatasetEvent, DatasetEventType, DatasetRow, PersistentDataPump} from "./dataset";
+import {DataRow, Dataset, DatasetEvent, DatasetEventType, DatasetRow, LoadStatus, PersistentDataPump} from "./dataset";
 import {createClient} from '@supabase/supabase-js';
 import {KeyedPersistentDataset} from "./persistent_dataset";
 import Any = jasmine.Any;
 
+/**
+ * PersistenceMode determines whether only modified fields and rows are written back to the database, or all fields are written back.
+ */
 export enum PersistenceMode {
+
+    // Rows with modified fields are updated, and only the modified fields are written back
     BY_FIELD,
+
+    // Rows with modified fields are updated, and all fields are written back
     BY_ROW,
+
+    // All rows are updated and/or inserted, and all fields are written back
     BY_DATASET
 }
 
+/**
+ * ReactiveWriteMode determines whether a field change will trigger a write to the database.
+ */
+export enum ReactiveWriteMode {
+    DISABLED    = 0,   // Reactive writes are disabled
+    ENABLED     = 1,   // Reactive writes are enabled
+}
+
+/**
+ * AUTO_KEY determines whether the database will generate a key for a new row.
+ */
 export enum AUTO_KEY {
     FALSE,
     TRUE
 }
 
+/**
+ * SaveMode determines whether a save operation will overwrite existing data, or will fail if the data has been modified since it was loaded.
+ */
 export enum SaveMode {
     OVERWRITE,
     OPTIMISTIC
@@ -23,6 +46,8 @@ export enum SaveMode {
  * The SupabaseDataPump is a PersistentDataPump that can be used to load and save data from a Supabase database.
  */
 export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDataset> {
+
+    public Reactive_Write_Mode = ReactiveWriteMode.ENABLED;
 
     public Persistence_Mode = PersistenceMode.BY_FIELD;
     public Auto_Key = AUTO_KEY.TRUE;
@@ -76,8 +101,16 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
         this.insertFunction = insertFunction;
     }
 
+    public get delete(): (t: SupabaseDataPump) => Promise<{ data, status, statusText }> {
+        return this.deleteFunction;
+    }
 
-    public async load(dataset: KeyedPersistentDataset) {
+    public set delete(deleteFunction: (t: SupabaseDataPump) => Promise<{ data, status, statusText }>) {
+        this.deleteFunction = deleteFunction;
+    }
+
+
+    public async load(dataset: KeyedPersistentDataset) : Promise<LoadStatus> {
 
         await dataset.clear();
         this.initialisePump(dataset);
@@ -87,11 +120,11 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
         if (error != null) {
 
             console.log(error);
-            return;
+            return LoadStatus.FAILURE;
         }
 
         if (data == null) {
-            return
+            return LoadStatus.SUCCESS;
         }
 
 
@@ -104,6 +137,8 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
 
             }
         }
+
+        return LoadStatus.SUCCESS;
     }
 
     private initialisePump(dataset: KeyedPersistentDataset) {
@@ -145,16 +180,26 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
             // TODO Support optimistic locking and other modes
             let currentRow: DatasetRow = dataset.navigator().current().value;
 
-            let updatedFields: Object = {};
+            let queryFields: Object = {};
 
             for (let field of currentRow.entries()) {
 
-                if (field.isModified) {
-                    updatedFields[field.name] = field.value;
+                switch (this.Persistence_Mode) {
+                    case PersistenceMode.BY_FIELD: {
+                        if (field.modified) {
+                            queryFields[field.name] = field.value;
+                        }
+                        break;
+                    }
+
+                    default: {
+                        queryFields[field.name] = field.value;
+                        break;
+                    }
                 }
             }
 
-            let updateQuery = t.supabaseClient.from(this.theTableName).update(updatedFields);
+            let updateQuery = t.supabaseClient.from(this.theTableName).update(queryFields);
 
             for (let key of this.keys) {
 
@@ -185,17 +230,39 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
                     fields[field.name] = field.value;
                 }
 
-
-
                 let updateQuery = t.supabaseClient.from(this.theTableName).insert(fields);
 
                 return updateQuery;
 
         }
 
+        this.delete = (t: SupabaseDataPump) => {
+
+                console.log("Deleting row");
+
+                // TODO Support optimistic locking and other modes
+                let deletedRow = dataset.deletedRows[0];
+
+                let deleteQuery = t.supabaseClient.from(this.theTableName).delete();
+
+                for (let key of this.keys) {
+
+                    let theField = deletedRow.getField(key);
+
+                    deleteQuery = deleteQuery.eq(theField.name, theField.value)
+                }
+
+                deleteQuery = deleteQuery.select();
+
+                dataset.clearDeletedRows();
+
+                return deleteQuery;
+
+        }
 
 
-        // Subscribes to the dataset so that we can update the DB when the dataset is updated
+
+        // Subscribes to the dataset so that we can update the DB when the dataset is updated in reactive mode
 
         // outer is used to get around the fact that the "this" keyword returns the wrong instance
         // when used in the async function
@@ -206,23 +273,29 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
             let dataset = event.source;
 
             // If the row has been deleted, then we need to delete it from the DB
-            if (event.eventType == DatasetEventType.ROW_DELETED) {
-                // Delete row from DB
+            if (event.eventType == DatasetEventType.ROW_DELETED && outerThis.Reactive_Write_Mode == ReactiveWriteMode.ENABLED) {
+                // Delete row from DB if reactive write mode is enabled
+                if (outerThis.Reactive_Write_Mode == ReactiveWriteMode.ENABLED) {
+                    const {data, status, statusText} = await outerThis.delete(this);
+                    console.log("Deleted " + JSON.stringify(data) + ": STATUS - " + status);
+                }
             }
 
             // If the row has been inserted, then we need to insert it into the DB
             if (event.eventType == DatasetEventType.ROW_INSERTED) {
-                // Insert row into DB
-                if (this.Persistence_Mode == PersistenceMode.BY_FIELD) {
+                // Insert row into DB if reactive write mode is enabled
+                if (outerThis.Persistence_Mode == PersistenceMode.BY_FIELD && outerThis.Reactive_Write_Mode == ReactiveWriteMode.ENABLED) {
                     const {data, status, statusText} = await outerThis.insert(this);
                     console.log("Inserted " + JSON.stringify(data) + ": STATUS - " + status);
                 }
+                affectedRow.resetModified();
             }
 
             // If the row has been updated, then we need to update the DB
             if (event.eventType == DatasetEventType.ROW_UPDATED) {
 
-                if (this.Persistence_Mode == PersistenceMode.BY_FIELD) {
+                // Update row in DB if reactive write mode is enabled
+                if (outerThis.Persistence_Mode == PersistenceMode.BY_FIELD && outerThis.Reactive_Write_Mode == ReactiveWriteMode.ENABLED) {
                     const {data, status, statusText} = await outerThis.update(this);
                     console.log("Updated " + JSON.stringify(data) + ": STATUS - " + status);
                 }
@@ -252,32 +325,71 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
 
     public async save(dataset: KeyedPersistentDataset) {
 
-            /*let navigator = dataset.navigator();
+        // TODO Support optimistic locking and other modes
+        // TODO Handle new rows
 
-            let row: DatasetRow;
+        switch (this.Persistence_Mode) {
+            case PersistenceMode.BY_DATASET: {
 
-            while (navigator.next()) {
-
-                row = navigator.current().value;
-
-                if (row.isModified) {
-
-                    if (row.isNew) {
-
-                        let insertQuery = this.supabaseClient.from(dataset.source.tableName).insert(row.entries());
-
-                        const {data, status, statusText} = await insertQuery;
-
-                        console.log("Inserted " + JSON.stringify(data) + ": STATUS - " + status);
-
-                    } else {
-
-                        const {data, status, statusText} = await this.update(this);
-
+                // Iterate through all the rows, and update all fields
+                for (let row of dataset.navigator()) {
+                    let queryFields: Object = {};
+                    for (let field of row.entries()) {
+                        queryFields[field.name] = field.value;
+                    }
+                    let updateQuery = this.supabaseClient.from(this.theTableName).update(queryFields);
+                    for (let key of this.keys) {
+                        let theField = dataset.getField(key);
+                        updateQuery = updateQuery.eq(theField.name, theField.value)
+                    }
+                    updateQuery = updateQuery.select();
+                    const {data, status, statusText} = await updateQuery;
+                    console.log("Updated " + JSON.stringify(data) + ": STATUS - " + status);
+                }
+                break;
+            }
+            case PersistenceMode.BY_ROW: {
+                // Iterate through all the updates rows, and update all fields in each row
+                for (let row of dataset.navigator()) {
+                    if (row.isModified()) {
+                        let queryFields: Object = {};
+                        for (let field of row.entries()) {
+                            queryFields[field.name] = field.value;
+                        }
+                        let updateQuery = this.supabaseClient.from(this.theTableName).update(queryFields);
+                        for (let key of this.keys) {
+                            let theField = dataset.getField(key);
+                            updateQuery = updateQuery.eq(theField.name, theField.value)
+                        }
+                        updateQuery = updateQuery.select();
+                        const {data, status, statusText} = await updateQuery;
                         console.log("Updated " + JSON.stringify(data) + ": STATUS - " + status);
-
                     }
                 }
-            }*/
+                break;
+            }
+            case PersistenceMode.BY_FIELD: {
+                // Iterate through all the updates rows, and update only the modified fields in each row
+                for (let row of dataset.navigator()) {
+                    if (row.isModified()) {
+                        let queryFields: Object = {};
+                        for (let field of row.entries()) {
+                            if (field.modified) {
+                                queryFields[field.name] = field.value;
+                            }
+                        }
+                        let updateQuery = this.supabaseClient.from(this.theTableName).update(queryFields);
+                        for (let key of this.keys) {
+                            let theField = dataset.getField(key);
+                            updateQuery = updateQuery.eq(theField.name, theField.value)
+                        }
+                        updateQuery = updateQuery.select();
+                        const {data, status, statusText} = await updateQuery;
+                        console.log("Updated " + JSON.stringify(data) + ": STATUS - " + status);
+                    }
+                }
+            }
+        }
+
     }
 }

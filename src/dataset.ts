@@ -29,6 +29,10 @@ export interface Field extends FieldDescriptor {
     get value(): string
 
     subscribe(observer: (e: DatasetEvent<Field, Field>) => void): Subscription
+
+    get modified(): boolean
+
+    resetModified() : void
 }
 
 /**
@@ -69,8 +73,20 @@ export interface DataRow {
 
     setFieldValue(fieldName: string, value: string): void
 
+    isRowPopulated(): boolean
+
+    isModified(): boolean
+
+    resetModified() : void
+
     subscribe(observer: (v: DatasetEvent<DataRow, Field | DataRow>) => void): Subscription
 
+}
+
+// Todo - turn this into a status class with a status, message, and optional error
+export enum LoadStatus {
+    SUCCESS,
+    FAILURE
 }
 
 /**
@@ -78,7 +94,7 @@ export interface DataRow {
  */
 export interface DataPump<T extends Dataset> {
 
-    load(dataset: T): Promise<void>
+    load(dataset: T): Promise<LoadStatus>
 }
 
 /**
@@ -87,6 +103,7 @@ export interface DataPump<T extends Dataset> {
 export interface PersistentDataPump<T extends PersistentDataset> extends DataPump<PersistentDataset> {
 
     save(dataset: T): Promise<void>
+
 }
 
 /**
@@ -162,8 +179,11 @@ export class Dataset implements DataRow {
     private readonly datasetId: string;
     private readonly typeHash: number;
     private isQuiet: boolean = false;
+    private modified: boolean = false;
 
     private theNavigator: DatasetRowNavigator = null;
+
+    private theDeletedRows : DatasetRow[]= [];
 
     constructor(fieldDescriptors: FieldDescriptors);
 
@@ -194,6 +214,14 @@ export class Dataset implements DataRow {
 
     public get quiet() {
         return this.isQuiet;
+    }
+
+    public get deletedRows() : DatasetRow[] {
+        return this.theDeletedRows;
+    }
+
+    public clearDeletedRows() {
+        this.theDeletedRows = [];
     }
 
     /**
@@ -306,6 +334,10 @@ export class Dataset implements DataRow {
         return null;
     }
 
+    public getCurrentRow(): DatasetRow {
+        return this.navigator().current().value;
+    }
+
     public getRowIds(): string[] {
 
         let rowIds = new Array<string>();
@@ -384,6 +416,7 @@ export class Dataset implements DataRow {
         }
 
         let lastRowDeleted = key == this.theRows.size - 1;
+        this.theDeletedRows.push(theRow);
         this.theRows.delete(key);
 
 
@@ -419,6 +452,27 @@ export class Dataset implements DataRow {
     public clear() {
         this.theRows.clear();
         //this.theFieldDescriptors.clear();
+    }
+
+    public isRowPopulated(): boolean {
+        return this.navigator().isRowPopulated();
+    }
+
+    public isModified(): boolean {
+        this.modified = false;
+
+        this.theRows.forEach((row) => {
+            if (row.isModified()) {
+                this.modified = true;
+                return this.modified
+            }
+        });
+
+        return false;
+    }
+
+    public resetModified() {
+        this.navigator().resetModified();
     }
 
 }
@@ -596,33 +650,72 @@ class DatasetRowNavigator implements NavigableIterator<DatasetRow> {
 
         }
 
+        if (rows.length == 0) {
+            this.theCurrentRow = undefined;
+            return {
+                next(): IteratorResult<DatasetRow> {
+                    return {
+                        value: undefined,
+                        done: true
+                    }
+                },
+
+                [Symbol.iterator](): IterableIterator<DatasetRow> {
+                    return this;
+                }
+            }
+        }
         // Move to the first row of the result set
         this.theCurrentRow = firstResultRow;
         this.iterationIndex = index;
 
         return rows.values();
+        //rows.values();
     }
 
     public getField(fieldName: string): Field {
         console.log("rows : " + this.datasetRows.size);
-        if (this.datasetRows.size == 0) return undefined;
+        if (this.datasetRows.size == 0 || this.theCurrentRow == null ) return undefined;
 
         return this.theCurrentRow.getField(fieldName);
     }
 
     public getValue(fieldName: string): string {
-        if (this.datasetRows.size == 0) return undefined;
+        if (this.datasetRows.size == 0 || this.theCurrentRow == null ) return undefined;
 
         return this.theCurrentRow.getValue(fieldName);
     }
 
     public setFieldValue(fieldName: string, value: string): void {
-        if (this.datasetRows.size == 0) throw new Error("Dataset has no rows.");
+        if (this.datasetRows.size == 0 ) throw new Error("Dataset has no rows.");
+        if (this.theCurrentRow == null ) throw new Error("Current row is null.");
+
         return this.theCurrentRow.setFieldValue(fieldName, value);
     }
 
     subscribe(observer: (v: DatasetEvent<DataRow, Field>) => void): Subscription {
         return this.theCurrentRow.subscribe(observer);
+    }
+
+    public isRowPopulated(): boolean {
+        if (this.datasetRows.size == 0 ) throw new Error("Dataset has no rows.");
+        if (this.theCurrentRow == null ) throw new Error("Current row is null.");
+
+        return this.theCurrentRow.isRowPopulated();
+    }
+
+    public isModified(): boolean {
+        if (this.datasetRows.size == 0 ) throw new Error("Dataset has no rows.");
+        if (this.theCurrentRow == null ) throw new Error("Current row is null.");
+
+        return this.theCurrentRow.isModified();
+    }
+
+    public resetModified() {
+        if (this.datasetRows.size == 0 ) throw new Error("Dataset has no rows.");
+        if (this.theCurrentRow == null ) throw new Error("Current row is null.");
+
+        this.theCurrentRow.resetModified();
     }
 
 }
@@ -663,8 +756,12 @@ export class TypedField implements Field {
         this.subject.next(new DatasetEvent<Field, Field>(this.id, this, this, DatasetEventType.FIELD_VALUE_UPDATED));
     }
 
-    get isModified() {
+    get modified() {
         return !(this.fieldValue === this.initialValue);
+    }
+
+    public resetModified() : void {
+        this.initialValue = this.fieldValue;
     }
 
     public subscribe(observer: (e: DatasetEvent<Field, Field>) => void): Subscription {
@@ -722,10 +819,6 @@ export class DatasetRow implements DataRow {
                 this.addField(value);
             });
         }
-    }
-
-    get isModified(): boolean {
-        return this.modified;
     }
 
     get typeHash(): number {
@@ -809,6 +902,43 @@ export class DatasetRow implements DataRow {
         this.fieldDescriptors.set(fieldDescription.name, fieldDescription);
     }
 
+    public isRowPopulated(): boolean {
+
+        let rowPopulated = true;
+
+        this.fieldDescriptors.forEach((value: FieldDescriptor, key: string) => {
+            if (!this.datasetFieldMap.has(key)) {
+                rowPopulated = false;
+            }
+        });
+
+        return rowPopulated;
+    }
+
+    public isModified(): boolean {
+
+        if (this.modified) {
+            return true;
+        }
+
+        let modified = false;
+        this.datasetFieldMap.forEach((value: TypedField, key: string) => {
+            if (value.modified) {
+                modified = true;
+            }
+        });
+
+        this.modified = modified;
+        return this.modified;
+    }
+
+    public resetModified(): void {
+        this.modified = false;
+        this.datasetFieldMap.forEach((value: TypedField, key: string) => {
+            value.resetModified();
+        });
+    }
+
 
 }
 
@@ -821,7 +951,7 @@ export class ObjectArrayDataPump implements DataPump<Dataset> {
     constructor(protected data : {}[]) {
     }
 
-    public load(dataset: Dataset): Promise<void> {
+    public load(dataset: Dataset): Promise<LoadStatus> {
         
         return new Promise((resolve, reject) => {
             for (let rowValues of this.data) {
@@ -844,7 +974,7 @@ export class ObjectArrayDataPump implements DataPump<Dataset> {
 
             }
 
-            resolve();
+            resolve(LoadStatus.SUCCESS);
         });
     }
 }

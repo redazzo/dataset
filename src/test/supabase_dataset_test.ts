@@ -1,7 +1,7 @@
-import {SupabaseDataPump} from "../supabase_database_pump";
+import {ReactiveWriteMode, SupabaseDataPump} from "../supabase_database_pump";
 import {KeyedPersistentDataset} from "../persistent_dataset";
-import {FieldType} from "../dataset";
-import * as assert from "assert";
+import {createClient} from '@supabase/supabase-js';
+import {DatasetRow, FieldType} from "../dataset";
 
 const credentials = {
     url: 'https://erhnfxdfmdtqjchmofge.supabase.co',
@@ -34,16 +34,53 @@ const test_data = {
 
 }
 
+let firstId = 1;
+
+const supabaseClient = createClient(credentials.url, credentials.key);
+
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+beforeAll(async () => {
+    console.log('1 - beforeEach')
 
-function createDataset() {
+    // Delete all rows
+    await supabaseClient.from(TABLE_NAME).delete().neq("id","99999").then((result) => {
+        console.log(result);
+    });
 
-    //        .eq('id', 1).select();
-    //}
-    //.filter(this.sqlParameters?.filter);
+    // Insert the test data
+    let isFirstResult = false;
+    for (let i = 1; i <= 3; i++) {
+
+        await supabaseClient.from(TABLE_NAME).insert([ test_data[i] ]).then((result) => {
+            console.log(result);
+        });
+
+        if (!isFirstResult) {
+            await supabaseClient.from(TABLE_NAME).select().then((result) => {
+                console.log(result);
+                isFirstResult = true;
+
+                firstId = parseInt(result.data[0].id);
+            });
+        }
+    }
+
+    await sleep(1000);
+});
+
+afterAll(async () => {
+        console.log('1 - afterEach');
+    await sleep(1000);
+});
+
+/**
+ * Create a dataset for use during testing
+ */
+function createDataset(reactiveWriteMode : ReactiveWriteMode) {
 
     let supabaseDatasetPump = new SupabaseDataPump(credentials);
+    supabaseDatasetPump.Reactive_Write_Mode = reactiveWriteMode;
 
     const columnTypes = [
         {
@@ -73,7 +110,7 @@ function createDataset() {
  */
 test('Load Dataset', async () => {
 
-    let dataset = createDataset();
+    let dataset = createDataset(ReactiveWriteMode.ENABLED);
 
     // Ensure that the dataset is empty after creation
     expect(dataset.rowCount).toBe(0);
@@ -91,14 +128,19 @@ test('Load Dataset', async () => {
 test("Update and Reset", async () => {
 
     // Cycle through the dataset and update and reset each row
+    let dataset = createDataset(ReactiveWriteMode.ENABLED);
+    await dataset.load();
 
     for (let i = 1; i <= 3; i++) {
 
-        let dataset = createDataset();
-        await dataset.load();
 
-        // Find the row with id = i
-        dataset.navigator().moveToFind(new Map([[ID, i]]));
+
+        let rowId = firstId + i - 1
+
+        // Find the row with id = rowId
+        let result = dataset.navigator().moveToFind(new Map([[ID, rowId]]));
+
+        expect(result.next().value).not.toBe(undefined);
 
         // Find the original values
         let originalValue = dataset.getField(MAKE).value;
@@ -106,7 +148,7 @@ test("Update and Reset", async () => {
 
         // Ensure that the values are correct
         expect(originalValue).toBe(test_data[i].make);
-        expect(id).toBe(i);
+        expect(id).toBe(rowId);
 
         // Change the value
         dataset.setFieldValue(MAKE, "LALALAND");
@@ -117,8 +159,9 @@ test("Update and Reset", async () => {
         // Reload the dataset
         await dataset.load();
 
-        // Find the row with id = i again
-        dataset.navigator().moveToFind(new Map([[ID, i]]));
+        // Find the row with id = rowId again
+        result = dataset.navigator().moveToFind(new Map([[ID, rowId]]));
+        expect(result.next().value).not.toBe(undefined);
 
         // Find the new values
         let newValue = dataset.getField(MAKE).value;
@@ -136,7 +179,8 @@ test("Update and Reset", async () => {
         await dataset.load();
 
         // Find the row with id = i again
-        dataset.navigator().moveToFind(new Map([[ID, i]]));
+        result = dataset.navigator().moveToFind(new Map([[ID, rowId]]));
+        expect(result.next().value).not.toBe(undefined);
 
         // Find the new values
         newValue = dataset.getField(MAKE).value;
@@ -148,6 +192,29 @@ test("Update and Reset", async () => {
     }
 
     },20000);
+
+/**
+ * Test that the dataset can loaded, updated at several locations, saved, and reloaded.
+ */
+test("Update and Save", async () => {
+
+    let dataset = createDataset(ReactiveWriteMode.ENABLED);
+    await dataset.load();
+
+    let rowId = firstId;
+
+    console.log("RowId: " + rowId);
+    let result = dataset.navigator().moveToFind(new Map([[ID, rowId]]));
+    console.log("Dataset row id: " + dataset.getCurrentRow().getField(ID).value);
+
+    for (let row of result) {
+        let datasetRowId = row.id;
+        dataset.deleteRow(datasetRowId);
+    }
+
+    //dataset.save()
+    
+});
 
 class Waiter {
     private timeout: any
