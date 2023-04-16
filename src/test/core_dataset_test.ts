@@ -25,8 +25,8 @@ const FIELDNAME1 ="name";
 const FIELDNAME2 = "age";
 
 
-
-test('Dataset value is updated', () => {
+// Test that a field is created with the correct name and value
+test('Test updating of TypedField', () => {
 
     const field = new TypedField(FIELDNAME1, EMPTY_STRING, FieldType.STRING);
 
@@ -41,6 +41,7 @@ test('Dataset value is updated', () => {
 
 });
 
+// Test that the field can be updated and that the observers are notified
 test('Test subscribed field observers', () => {
 
     const field = new TypedField(FIELDNAME1, EMPTY_STRING, FieldType.STRING);
@@ -99,6 +100,7 @@ test('Test DatasetRow', () => {
 
 });
 
+// Test that the hash of a row is the same for two rows with the same fields
 test('Test type hash of datasetrow', () => {
 
     const row1 = new DatasetRow();
@@ -122,6 +124,7 @@ test('Test type hash of datasetrow', () => {
 
 });
 
+// Test that a dataset is created correctly, and when adding rows, that the row count is correct
 test('Dataset Test', () => {
 
     const theObserver = new DefaultObserver<Dataset, DatasetRow>();
@@ -169,7 +172,7 @@ test('Dataset Test', () => {
 });
 
 
-
+// Test that row observers are notified when a row is updated
 test('Populate dataset test', () => {
 
     let {theObserver, dataSet} = populateDataset();
@@ -197,6 +200,7 @@ test('Populate dataset test', () => {
 
 })
 
+// Test that the dataset iterator works
 test('Test iterator and navigator', () => {
 
     let {dataSet, p} = populateDataset();
@@ -247,6 +251,7 @@ test('Test iterator and navigator', () => {
 
 })
 
+// Test that row deletion works
 test('Delete row test', () => {
 
     let {dataSet, p} = populateDataset();
@@ -290,6 +295,7 @@ test('Delete row test', () => {
 
 })
 
+// Populate a dataset with test data
 function populateDataset() {
     const theObserver = new DefaultObserver<Dataset, DatasetRow>();
 
@@ -314,7 +320,7 @@ function populateDataset() {
     return {theObserver, dataSet, p};
 }
 
-
+// Various tests for the dataset row
 function doDatarowTest(row: DatasetRow) {
     const theObserver = new DefaultObserver<DatasetRow, Field>();
 

@@ -349,9 +349,9 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
                 break;
             }
             case PersistenceMode.BY_ROW: {
-                // Iterate through all the updates rows, and update all fields in each row
+                // Iterate through all the updated rows, and update all fields in each row
                 for (let row of dataset.navigator()) {
-                    if (row.isModified()) {
+                    if (row.modified) {
                         let queryFields: Object = {};
                         for (let field of row.entries()) {
                             queryFields[field.name] = field.value;
@@ -371,7 +371,7 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
             case PersistenceMode.BY_FIELD: {
                 // Iterate through all the updates rows, and update only the modified fields in each row
                 for (let row of dataset.navigator()) {
-                    if (row.isModified()) {
+                    if (row.modified) {
                         let queryFields: Object = {};
                         for (let field of row.entries()) {
                             if (field.modified) {

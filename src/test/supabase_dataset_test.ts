@@ -44,7 +44,7 @@ beforeAll(async () => {
     console.log('1 - beforeEach')
 
     // Delete all rows
-    await supabaseClient.from(TABLE_NAME).delete().neq("id","99999").then((result) => {
+    await supabaseClient.from(TABLE_NAME).delete().neq("id","-1").then((result) => {
         console.log(result);
     });
 
@@ -201,19 +201,31 @@ test("Update and Save", async () => {
     let dataset = createDataset(ReactiveWriteMode.ENABLED);
     await dataset.load();
 
-    let rowId = firstId;
+    expect(dataset.rowCount).toBe(3);
 
-    console.log("RowId: " + rowId);
-    let result = dataset.navigator().moveToFind(new Map([[ID, rowId]]));
-    console.log("Dataset row id: " + dataset.getCurrentRow().getField(ID).value);
+    let result = dataset.navigator().moveToFind(new Map([[ID, firstId]]));
 
-    for (let row of result) {
-        let datasetRowId = row.id;
-        dataset.deleteRow(datasetRowId);
+    let firstRow = result.next().value;
+    expect(firstRow).not.toBe(undefined);
+
+    let datasetRowId = firstRow.id;
+    dataset.deleteRow(datasetRowId);
+
+    expect(dataset.rowCount).toBe(2);
+
+    // Wait for database to be updated
+    await sleep(1000);
+
+    dataset = createDataset(ReactiveWriteMode.ENABLED);
+    await dataset.load();
+
+    expect(dataset.rowCount).toBe(2);
+
+    let cnt = 1;
+    for (let row of dataset.navigator()) {
+        expect((row.getField(ID).value)).toBe(firstId + cnt++);
     }
 
-    //dataset.save()
-    
 });
 
 class Waiter {
