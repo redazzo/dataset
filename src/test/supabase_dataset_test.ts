@@ -194,7 +194,7 @@ test("Update and Reset", async () => {
     },20000);
 
 /**
- * Test that the dataset can loaded, updated at several locations, saved, and reloaded.
+ * Test that the dataset can be loaded, updated at several locations, saved, and reloaded.
  */
 test("Update and Save", async () => {
 

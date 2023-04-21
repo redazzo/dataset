@@ -143,127 +143,30 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
 
     private initialisePump(dataset: KeyedPersistentDataset) {
 
-        if (dataset == null || dataset == undefined) {
+        if (dataset == null) {
             throw new Error("Dataset must be specified");
         }
 
-        if (dataset.source == null || dataset.source == undefined) {
+        if (dataset.source == null) {
             throw new Error("Dataset source must be specified");
         }
-
 
         this.dataSet = dataset;
 
         this.theTableName = dataset.source.tableName;
         this.keys = dataset.source.keys;
 
-        if (this.select == null || this.select == undefined) {
+        this.buildSelectFunction();
+        this.buildUpdateFunction(dataset);
+        this.buildInsertFunction(dataset);
+        this.buildDeleteFunction(dataset);
 
-            this.select = (aPump) => {
+        this.subscribeToDatasetUpdateEvents();
 
-                let selectedFields = aPump.buildSelectedFields();
+    }
 
-                let query = aPump.supabaseClient.from(this.theTableName).select(selectedFields, {count: 'exact'});
-
-                // TODO Support paging
-
-                return query;
-            }
-
-        }
-
-        // Prepare the update function
-        this.update = (t: SupabaseDataPump) => {
-
-            console.log("Updating row");
-
-            // TODO Support optimistic locking and other modes
-            let currentRow: DatasetRow = dataset.navigator().current().value;
-
-            let queryFields: Object = {};
-
-            for (let field of currentRow.entries()) {
-
-                switch (this.Persistence_Mode) {
-                    case PersistenceMode.BY_FIELD: {
-                        if (field.modified) {
-                            queryFields[field.name] = field.value;
-                        }
-                        break;
-                    }
-
-                    default: {
-                        queryFields[field.name] = field.value;
-                        break;
-                    }
-                }
-            }
-
-            let updateQuery = t.supabaseClient.from(this.theTableName).update(queryFields);
-
-            for (let key of this.keys) {
-
-                let theField = dataset.getField(key);
-
-                updateQuery = updateQuery.eq(theField.name, theField.value)
-            }
-
-            updateQuery = updateQuery.select();
-
-            return updateQuery;
-
-        }
-
-        // Prepare the insert function
-        this.insert = (t: SupabaseDataPump) => {
-
-                console.log("Inserting row");
-
-                // TODO Support optimistic locking and other modes
-                let currentRow: DatasetRow = dataset.navigator().current().value;
-
-                let fields: Object = {};
-
-                for (let field of currentRow.entries()) {
-
-
-                    fields[field.name] = field.value;
-                }
-
-                let updateQuery = t.supabaseClient.from(this.theTableName).insert(fields);
-
-                return updateQuery;
-
-        }
-
-        this.delete = (t: SupabaseDataPump) => {
-
-                console.log("Deleting row");
-
-                // TODO Support optimistic locking and other modes
-                let deletedRow = dataset.deletedRows[0];
-
-                let deleteQuery = t.supabaseClient.from(this.theTableName).delete();
-
-                for (let key of this.keys) {
-
-                    let theField = deletedRow.getField(key);
-
-                    deleteQuery = deleteQuery.eq(theField.name, theField.value)
-                }
-
-                deleteQuery = deleteQuery.select();
-
-                dataset.clearDeletedRows();
-
-                return deleteQuery;
-
-        }
-
-
-
-        // Subscribes to the dataset so that we can update the DB when the dataset is updated in reactive mode
-
+    // Subscribes to the dataset so that we can update the DB when the dataset is updated in reactive mode
+    private subscribeToDatasetUpdateEvents() {
         // outer is used to get around the fact that the "this" keyword returns the wrong instance
         // when used in the async function
         let outerThis = this;
@@ -301,10 +204,134 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
                 }
             }
         });
-
     }
 
-    //
+    private buildDeleteFunction(dataset: KeyedPersistentDataset) {
+        if (this.delete == null) {
+
+            this.delete = (t: SupabaseDataPump) => {
+
+                console.log("Deleting row");
+
+                // TODO Support optimistic locking and other modes
+                let deletedRow = dataset.deletedRows[0];
+
+                let deleteQuery = t.supabaseClient.from(this.theTableName).delete();
+
+                for (let key of this.keys) {
+
+                    let theField = deletedRow.getField(key);
+
+                    deleteQuery = deleteQuery.eq(theField.name, theField.value)
+                }
+
+                deleteQuery = deleteQuery.select();
+
+                dataset.clearDeletedRows();
+
+                return deleteQuery;
+
+            }
+
+        }
+    }
+
+    private buildInsertFunction(dataset: KeyedPersistentDataset) {
+        if (this.insert == null) {
+            this.insert = (t: SupabaseDataPump) => {
+
+                console.log("Inserting row");
+
+                // TODO Support optimistic locking and other modes
+                let currentRow: DatasetRow = dataset.navigator().current().value;
+
+                let fields: Object = {};
+
+                for (let field of currentRow.entries()) {
+
+
+                    fields[field.name] = field.value;
+                }
+
+                let updateQuery = t.supabaseClient.from(this.theTableName).insert(fields);
+
+                return updateQuery;
+
+            }
+
+        }
+    }
+
+    private buildUpdateFunction(dataset: KeyedPersistentDataset) {
+        if (this.update == null) {
+
+            this.update = (pump: SupabaseDataPump) => {
+
+                console.log("Updating row");
+
+                // TODO Support optimistic locking and other modes
+                let currentRow: DatasetRow = dataset.navigator().current().value;
+
+                let queryFields = this.buildQueryFields(currentRow);
+
+                let updateQuery = pump.supabaseClient.from(this.theTableName).update(queryFields);
+
+                for (let key of this.keys) {
+
+                    let theField = dataset.getField(key);
+
+                    updateQuery = updateQuery.eq(theField.name, theField.value)
+                }
+
+                updateQuery = updateQuery.select();
+
+                return updateQuery;
+
+            }
+
+        }
+    }
+
+    private buildSelectFunction() {
+        if (this.select == null) {
+
+            this.select = (aPump) => {
+
+                let selectedFields = aPump.buildSelectedFields();
+
+                let query = aPump.supabaseClient.from(this.theTableName).select(selectedFields, {count: 'exact'});
+
+                // TODO Support paging
+
+                return query;
+            }
+
+        }
+    }
+
+    private buildQueryFields(currentRow: DatasetRow) {
+        let queryFields: Object = {};
+
+        for (let field of currentRow.entries()) {
+
+            switch (this.Persistence_Mode) {
+                case PersistenceMode.BY_FIELD: {
+                    if (field.modified) {
+                        queryFields[field.name] = field.value;
+                    }
+                    break;
+                }
+
+                default: {
+                    queryFields[field.name] = field.value;
+                    break;
+                }
+            }
+        }
+        return queryFields;
+    }
+
+//
     private buildSelectedFields(): string {
 
         let selectedFields = "";
