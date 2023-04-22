@@ -67,7 +67,7 @@ test( 'Test file persistent dataset read, add row, save, reload from disk with n
 
     );
 
-    newPersistentDataset.load();
+    await newPersistentDataset.load();
 
 
     // TEST *******************************************

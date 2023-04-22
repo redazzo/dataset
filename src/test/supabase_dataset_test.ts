@@ -1,7 +1,7 @@
 import { SupabaseDataPump} from "../supabase_database_pump";
 import {KeyedPersistentDataset, ReactiveWriteMode} from "../persistent_dataset";
 import {createClient} from '@supabase/supabase-js';
-import {DatasetRow, FieldType} from "../dataset";
+import {DatasetRow, FieldType, GlobalMutex} from "../dataset";
 
 const credentials = {
     url: 'https://erhnfxdfmdtqjchmofge.supabase.co',
@@ -89,8 +89,8 @@ afterEach(async () => {
  */
 function createDataset(reactiveWriteMode : ReactiveWriteMode) {
 
-    let supabaseDatasetPump = new SupabaseDataPump(credentials);
-    supabaseDatasetPump.Reactive_Write_Mode = reactiveWriteMode;
+    let dataPump = new SupabaseDataPump(credentials);
+    dataPump.Reactive_Write_Mode = reactiveWriteMode;
 
     const columnTypes = [
         {
@@ -111,7 +111,7 @@ function createDataset(reactiveWriteMode : ReactiveWriteMode) {
         }
     ];
 
-    let dataset = new KeyedPersistentDataset(columnTypes, supabaseDatasetPump, {tableName: TABLE_NAME, keys: [ID]});
+    let dataset = new KeyedPersistentDataset(columnTypes, dataPump, {tableName: TABLE_NAME, keys: [ID]});
     return dataset;
 }
 
@@ -163,11 +163,10 @@ test("Update and Reset", async () => {
         // Change the value
         dataset.setFieldValue(MAKE, "LALALAND");
 
-        // Wait for database to be updated
-        await sleep(1000);
-
         // Reload the dataset
         await dataset.load();
+
+
 
         // Find the row with id = rowId again
         result = dataset.navigator().moveToFind(new Map([[ID, rowId]]));
@@ -182,9 +181,6 @@ test("Update and Reset", async () => {
         // Reset the value
         dataset.setFieldValue(MAKE, test_data[i].make);
 
-        // Wait for database to be updated
-        await sleep(1000);
-
         // Reload the dataset
         await dataset.load();
 
@@ -198,7 +194,6 @@ test("Update and Reset", async () => {
         // Ensure that the value has been changed back
         expect(newValue).toBe(test_data[i].make);
 
-        await sleep(1000);
     }
 
     },20000);
@@ -223,9 +218,6 @@ test("Update and Save", async () => {
 
     expect(dataset.rowCount).toBe(2);
 
-    // Wait for database to be updated
-    await sleep(1000);
-
     dataset = createDataset(ReactiveWriteMode.ENABLED);
     await dataset.load();
 
@@ -236,9 +228,6 @@ test("Update and Save", async () => {
     for (let row of dataset.navigator()) {
         expect((row.getField(ID).value)).toBe(firstId + cnt++);
     }
-
-    // Wait for database to be updated
-    await sleep(1000);
 
 });
 
@@ -276,9 +265,6 @@ test("Manual Row Insertion", async () => {
             expect((row.getField(ID).value)).toBe(firstId + cnt++);
         }
 
-        // Wait for database to be updated
-        await sleep(1000);
-
 });
 
 
@@ -294,22 +280,11 @@ test("Add Row", async () => {
 
         let newRow = dataset.addRow();
 
-    // Wait for database to be updated
-    await sleep(1000);
-
         newRow.setFieldValue(MAKE, "LALALAND");
         newRow.setFieldValue(MODEL, "LALALAND");
         newRow.setFieldValue(YEAR, "1965");
 
-        // Wait for database to be updated
-        await sleep(1000);
-
         expect(dataset.rowCount).toBe(4);
-
-        //await dataset.save();
-
-        // Wait for database to be updated
-        await sleep(1000);
 
         dataset = createDataset(ReactiveWriteMode.ENABLED);
         await dataset.load();

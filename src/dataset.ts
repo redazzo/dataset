@@ -1,6 +1,7 @@
 import {Subject, Subscription} from "rxjs";
 import {v4 as uuidv4} from 'uuid';
 import {PersistentDataset} from "./persistent_dataset";
+import {Mutex} from "async-mutex";
 
 export enum FieldType {
     STRING,
@@ -927,13 +928,16 @@ export class Dataset implements DataRow {
 
     public async load(pop: DataPump<Dataset>) {
 
-        this.clear();
+        await GlobalMutex.runExclusive(async () => {
+            this.clear();
 
-        console.log("Loading dataset");
-        this.quiet = true;
-        await pop.load(this).then(() => {
-            this.quiet = false
+            console.log("Loading dataset");
+            this.quiet = true;
+            await pop.load(this).then(() => {
+                this.quiet = false
+            });
         });
+
     }
 
     public clear() {
@@ -1005,6 +1009,19 @@ export class DefaultObserver<SourceType, DetailType> {
         this.detail = v.detail;
         this.source = v.source;
         this.count++;
+    }
+}
+
+export class GlobalMutex {
+    private static mutex = new Mutex();
+
+    public static async runExclusive<T>(fn: () => Promise<T>): Promise<T> {
+        const release = await GlobalMutex.mutex.acquire();
+        try {
+            return await fn();
+        } finally {
+            release();
+        }
     }
 }
 

@@ -173,9 +173,9 @@ test('Dataset Test', () => {
 
 
 // Test that row observers are notified when a row is updated
-test('Populate dataset test', () => {
+test('Populate dataset test', async () => {
 
-    let {theObserver, dataSet} = populateDataset();
+    let {theObserver, dataSet} = await populateDataset();
 
     expect(dataSet.rowCount).toBe(4);
     expect(theObserver.count).toBe(0);
@@ -201,9 +201,9 @@ test('Populate dataset test', () => {
 })
 
 // Test that the dataset iterator works
-test('Test iterator and navigator', () => {
+test('Test iterator and navigator', async () => {
 
-    let {dataSet, p} = populateDataset();
+    let {dataSet, p} = await populateDataset();
 
     let index = 0;
     for (let itr of dataSet.iterator()){
@@ -252,9 +252,9 @@ test('Test iterator and navigator', () => {
 })
 
 // Test that row deletion works
-test('Delete row test', () => {
+test('Delete row test', async () => {
 
-    let {dataSet, p} = populateDataset();
+    let {dataSet, p} = await populateDataset();
 
     expect(dataSet.rowCount).toBe(4);
 
@@ -296,7 +296,7 @@ test('Delete row test', () => {
 })
 
 // Populate a dataset with test data
-function populateDataset() {
+async function populateDataset() : Promise<{theObserver: DefaultObserver<Dataset, DatasetRow>, dataSet: Dataset, p: any[]}> {
     const theObserver = new DefaultObserver<Dataset, DatasetRow>();
 
     const columnTypes = [
@@ -316,7 +316,7 @@ function populateDataset() {
         {name: NAME4, age: AGE4}
     ]
 
-    dataSet.load(new ObjectArrayDataPump(p));
+    await dataSet.load(new ObjectArrayDataPump(p));
     return {theObserver, dataSet, p};
 }
 

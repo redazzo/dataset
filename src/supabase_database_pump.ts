@@ -4,12 +4,13 @@ import {
     DatasetEvent,
     DatasetEventType,
     DatasetRow,
-    FieldType,
+    FieldType, GlobalMutex,
     LoadStatus,
     PersistentDataPump
 } from "./dataset";
 import {createClient} from '@supabase/supabase-js';
 import {DB_AUTO_KEY, KeyedPersistentDataset, PersistenceMode, ReactiveWriteMode} from "./persistent_dataset";
+
 
 
 /**
@@ -82,33 +83,39 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
 
     public async load(dataset: KeyedPersistentDataset) : Promise<LoadStatus> {
 
-        await dataset.clear();
-        this.initialisePump(dataset);
 
-        const {data, count, error} = await this.selectFunction(this);
+        //let result = await GlobalMutex.runExclusive<LoadStatus>(async () : Promise<LoadStatus> => {
+            await dataset.clear();
+            this.initialisePump(dataset);
 
-        if (error != null) {
+            let loadStatus = LoadStatus.SUCCESS;
 
-            console.log(error);
-            return LoadStatus.FAILURE;
-        }
+            const {data, count, error} = await this.selectFunction(this);
+            if (error != null) {
 
-        if (data == null) {
-            return LoadStatus.SUCCESS;
-        }
-
-
-        for (let value of data) {
-
-            let row = dataset.addRow();
-            for (let fieldDescriptor of dataset.fieldDescriptors.values()) {
-
-                row.setFieldValue(fieldDescriptor.name, value[fieldDescriptor.name]);
-
+                console.log(error);
+                loadStatus = LoadStatus.FAILURE;
             }
-        }
 
-        return LoadStatus.SUCCESS;
+            if (data == null) {
+                loadStatus = LoadStatus.FAILURE;
+            }
+
+
+            for (let value of data) {
+
+                let row = dataset.addRow();
+                for (let fieldDescriptor of dataset.fieldDescriptors.values()) {
+
+                    row.setFieldValue(fieldDescriptor.name, value[fieldDescriptor.name]);
+
+                }
+            }
+
+            return loadStatus;
+        //});
+
+        //return result;
     }
 
     private initialisePump(dataset: KeyedPersistentDataset) {
@@ -149,8 +156,10 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
             if (event.eventType == DatasetEventType.ROW_DELETED && outerThis.Reactive_Write_Mode == ReactiveWriteMode.ENABLED) {
                 // Delete row from DB if reactive write mode is enabled
                 if (outerThis.Reactive_Write_Mode == ReactiveWriteMode.ENABLED) {
-                    const {data, status, statusText} = await outerThis.delete(this);
-                    console.log("Deleted " + JSON.stringify(data) + ": STATUS - " + status);
+                    await GlobalMutex.runExclusive(async () => {
+                        const {data, status, statusText} = await outerThis.delete(this);
+                        console.log("Deleted " + JSON.stringify(data) + ": STATUS - " + status);
+                    });
                 }
             }
 
@@ -159,15 +168,20 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
                 // Insert row into DB if reactive write mode is enabled
                 // Note this only works if the  database generates the key, and there are no fields that are defined as NOT NULL in the DB
                 if (outerThis.Persistence_Mode == PersistenceMode.BY_FIELD && outerThis.Reactive_Write_Mode == ReactiveWriteMode.ENABLED) {
-                    const {data, status, statusText} = await outerThis.insert(this);
+                    await GlobalMutex.runExclusive(async () => {
+                        const {data, status, statusText} = await outerThis.insert(this);
 
-                    // Update the key field with the value returned from the DB
-                    if (outerThis.Auto_Key == DB_AUTO_KEY.TRUE) {
-                        this.keys.forEach((key) => {
-                            affectedRow.setFieldValue(key, data[0][key].toString());
-                        });
-                    }
-                    console.log("Inserted " + JSON.stringify(data) + ": STATUS - " + status);
+                        // Update the key field with the value returned from the DB
+                        outerThis.dataSet.quiet = true;
+                        if (outerThis.Auto_Key == DB_AUTO_KEY.TRUE) {
+                            this.keys.forEach((key) => {
+                                affectedRow.setFieldValue(key, data[0][key].toString());
+                            });
+                        }
+                        outerThis.dataSet.quiet = false;
+                        console.log("Inserted " + JSON.stringify(data) + ": STATUS - " + status);
+                    });
+
                 }
                 affectedRow.resetModified();
             }
@@ -177,8 +191,11 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
 
                 // Update row in DB if reactive write mode is enabled
                 if (outerThis.Persistence_Mode == PersistenceMode.BY_FIELD && outerThis.Reactive_Write_Mode == ReactiveWriteMode.ENABLED) {
-                    const {data, status, statusText} = await outerThis.update(this);
-                    console.log("Updated " + JSON.stringify(data) + ": STATUS - " + status);
+                    await GlobalMutex.runExclusive(async () => {
+                        const {data, status, statusText} = await outerThis.update(this);
+                        console.log("Updated " + JSON.stringify(data) + ": STATUS - " + status);
+                    });
+
                 }
             }
         });
@@ -389,9 +406,10 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
                         let theField = dataset.getField(key);
                         updateQuery = updateQuery.eq(theField.name, theField.value)
                     }
-                    updateQuery = updateQuery.select();
-                    const {data, status, statusText} = await updateQuery;
-                    console.log("Updated " + JSON.stringify(data) + ": STATUS - " + status);
+                    await GlobalMutex.runExclusive(async () => {
+                        const {data, status, statusText} = await updateQuery.select();
+                        console.log("Updated " + JSON.stringify(data) + ": STATUS - " + status);
+                    });
                 }
                 break;
             }
@@ -408,9 +426,10 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
                             let theField = dataset.getField(key);
                             updateQuery = updateQuery.eq(theField.name, theField.value)
                         }
-                        updateQuery = updateQuery.select();
-                        const {data, status, statusText} = await updateQuery;
-                        console.log("Updated " + JSON.stringify(data) + ": STATUS - " + status);
+                        await GlobalMutex.runExclusive(async () => {
+                            const {data, status, statusText} = await updateQuery.select();
+                            console.log("Updated " + JSON.stringify(data) + ": STATUS - " + status);
+                        });
                     }
                 }
                 break;
@@ -430,9 +449,10 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
                             let theField = dataset.getField(key);
                             updateQuery = updateQuery.eq(theField.name, theField.value)
                         }
-                        updateQuery = updateQuery.select();
-                        const {data, status, statusText} = await updateQuery;
-                        console.log("Updated " + JSON.stringify(data) + ": STATUS - " + status);
+                        await GlobalMutex.runExclusive(async () => {
+                            const {data, status, statusText} = await updateQuery.select();
+                            console.log("Updated " + JSON.stringify(data) + ": STATUS - " + status);
+                        });
                     }
                 }
             }
