@@ -6,7 +6,8 @@ export enum FieldType {
     STRING,
     INTEGER,
     FLOAT,
-    DATE
+    DATE,
+    BOOLEAN // Todo - add more types
 }
 
 /**
@@ -858,6 +859,10 @@ export class Dataset implements DataRow {
 
         }
 
+        let noRows = this.theRows.size
+        this.theRows.set(noRows, row);
+        this.navigator().last();
+
         // Make the dataset an observer of the row, and fire an event if there is a change to the row
         row.subscribe((v) => {
 
@@ -865,10 +870,6 @@ export class Dataset implements DataRow {
 
             datasetThis.subject.next(new DatasetEvent<Dataset, DatasetRow>(datasetThis.datasetId, row, datasetThis, DatasetEventType.ROW_UPDATED));
         });
-
-        let noRows = this.theRows.size
-        this.theRows.set(noRows, row);
-        this.navigator().last();
         if (!this.quiet) this.subject.next(new DatasetEvent<Dataset, DatasetRow>(this.datasetId, row, this, DatasetEventType.ROW_INSERTED));
         return row;
     }

@@ -1,46 +1,16 @@
-import {DataRow, Dataset, DatasetEvent, DatasetEventType, DatasetRow, LoadStatus, PersistentDataPump} from "./dataset";
+import {
+    DataRow,
+    Dataset,
+    DatasetEvent,
+    DatasetEventType,
+    DatasetRow,
+    FieldType,
+    LoadStatus,
+    PersistentDataPump
+} from "./dataset";
 import {createClient} from '@supabase/supabase-js';
-import {KeyedPersistentDataset} from "./persistent_dataset";
-import Any = jasmine.Any;
+import {DB_AUTO_KEY, KeyedPersistentDataset, PersistenceMode, ReactiveWriteMode} from "./persistent_dataset";
 
-/**
- * PersistenceMode determines whether only modified fields and rows are written back to the database, or all fields are written back.
- */
-export enum PersistenceMode {
-
-    // Rows with modified fields are updated, and only the modified fields are written back
-    BY_FIELD,
-
-    // Rows with modified fields are updated, and all fields are written back
-    BY_ROW,
-
-    // All rows are updated and/or inserted, and all fields are written back
-    BY_DATASET
-}
-
-/**
- * ReactiveWriteMode determines whether a field change will trigger a write to the database.
- */
-export enum ReactiveWriteMode {
-    DISABLED    = 0,   // Reactive writes are disabled
-    ENABLED     = 1,   // Reactive writes are enabled
-}
-
-/**
- * AUTO_KEY determines whether the database will generate a key for a new row.
- */
-export enum AUTO_KEY {
-    FALSE,
-    TRUE
-}
-
-/**
- * SaveMode determines whether a save operation will overwrite existing data, or will fail if the data has been modified since it was loaded.
- */
-export enum SaveMode {
-    OVERWRITE,
-    OPTIMISTIC
-}
 
 /**
  * The SupabaseDataPump is a PersistentDataPump that can be used to load and save data from a Supabase database.
@@ -50,7 +20,7 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
     public Reactive_Write_Mode = ReactiveWriteMode.ENABLED;
 
     public Persistence_Mode = PersistenceMode.BY_FIELD;
-    public Auto_Key = AUTO_KEY.TRUE;
+    public Auto_Key = DB_AUTO_KEY.TRUE;
 
 
     private readonly theSupabaseClient;
@@ -187,6 +157,7 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
             // If the row has been inserted, then we need to insert it into the DB
             if (event.eventType == DatasetEventType.ROW_INSERTED) {
                 // Insert row into DB if reactive write mode is enabled
+                // Note this only works if the  database generates the key, and there are no fields that are defined as NOT NULL in the DB
                 if (outerThis.Persistence_Mode == PersistenceMode.BY_FIELD && outerThis.Reactive_Write_Mode == ReactiveWriteMode.ENABLED) {
                     const {data, status, statusText} = await outerThis.insert(this);
                     console.log("Inserted " + JSON.stringify(data) + ": STATUS - " + status);
@@ -249,11 +220,43 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
 
                 for (let field of currentRow.entries()) {
 
+                    let addField = true;
+                    if (dataset.dbAutoKey) {
+                        this.keys.forEach(key => {
+                            if (field.name == key) {
+                                addField = false;
+                                return;
+                            }
+                        })
+                    }
 
-                    fields[field.name] = field.value;
+                    if (addField) {
+
+                        let value = undefined;
+
+                        switch (field.type) {
+                            case FieldType.FLOAT:
+                                value = parseFloat(field.value);
+                                break;
+                            case FieldType.BOOLEAN:
+                                value = field.value == "true";
+                                break;
+                            case FieldType.DATE:
+                                value = new Date(field.value);
+                                break;
+                            case FieldType.STRING:
+                                value = field.value;
+                                break;
+                            case FieldType.INTEGER:
+                                value = parseInt(field.value);
+                                break;
+                        }
+
+                        fields[field.name] = value;
+                    }
                 }
 
-                let updateQuery = t.supabaseClient.from(this.theTableName).insert(fields);
+                let updateQuery = t.supabaseClient.from(this.theTableName).insert(fields).select();
 
                 return updateQuery;
 

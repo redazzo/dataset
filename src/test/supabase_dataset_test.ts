@@ -1,5 +1,5 @@
-import {ReactiveWriteMode, SupabaseDataPump} from "../supabase_database_pump";
-import {KeyedPersistentDataset} from "../persistent_dataset";
+import { SupabaseDataPump} from "../supabase_database_pump";
+import {KeyedPersistentDataset, ReactiveWriteMode} from "../persistent_dataset";
 import {createClient} from '@supabase/supabase-js';
 import {DatasetRow, FieldType} from "../dataset";
 
@@ -34,13 +34,23 @@ const test_data = {
 
 }
 
+const test_data_2 = {
+    1: {
+        make: "Chev",
+        model: "Cam",
+        year: 1999
+
+    }
+}
+
 let firstId = 1;
 
 const supabaseClient = createClient(credentials.url, credentials.key);
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-beforeAll(async () => {
+
+beforeEach(async () => {
     console.log('1 - beforeEach')
 
     // Delete all rows
@@ -69,7 +79,7 @@ beforeAll(async () => {
     await sleep(1000);
 });
 
-afterAll(async () => {
+afterEach(async () => {
         console.log('1 - afterEach');
     await sleep(1000);
 });
@@ -221,10 +231,92 @@ test("Update and Save", async () => {
 
     expect(dataset.rowCount).toBe(2);
 
+    // cnt is 1 because we deleted the first row
     let cnt = 1;
     for (let row of dataset.navigator()) {
         expect((row.getField(ID).value)).toBe(firstId + cnt++);
     }
+
+    // Wait for database to be updated
+    await sleep(1000);
+
+});
+
+/**
+ * Test manual row insertion by directly using the supabase client.
+ */
+test("Manual Row Insertion", async () => {
+
+        //await sleep(1000);
+        let dataset = createDataset(ReactiveWriteMode.ENABLED);
+        await dataset.load();
+
+        expect(dataset.rowCount).toBe(3);
+
+        // Insert a row manually
+        await supabaseClient.from(TABLE_NAME).insert({
+            make: "",
+            model: "",
+            year: 0,
+        }).then((result) => {
+            console.log(result);
+        });
+
+        // Wait for database to be updated
+        await sleep(1000);
+
+        dataset = createDataset(ReactiveWriteMode.ENABLED);
+        await dataset.load();
+
+        expect(dataset.rowCount).toBe(4);
+
+        // cnt is 0 because we didn't delete any rows, so we can start at 0
+        let cnt = 0;
+        for (let row of dataset.navigator()) {
+            expect((row.getField(ID).value)).toBe(firstId + cnt++);
+        }
+
+        // Wait for database to be updated
+        await sleep(1000);
+
+});
+
+
+/**
+ * Test that a row can be added to the dataset and saved.
+ */
+test("Add Row", async () => {
+
+        let dataset = createDataset(ReactiveWriteMode.ENABLED);
+        await dataset.load();
+
+        expect(dataset.rowCount).toBe(3);
+
+        let newRow = dataset.addRow();
+
+        newRow.setFieldValue(MAKE, "LALALAND");
+        newRow.setFieldValue(MODEL, "LALALAND");
+        newRow.setFieldValue(YEAR, "1965");
+
+        // Wait for database to be updated
+        await sleep(1000);
+
+        expect(dataset.rowCount).toBe(4);
+
+        //await dataset.save();
+
+        // Wait for database to be updated
+        await sleep(1000);
+
+        dataset = createDataset(ReactiveWriteMode.ENABLED);
+        await dataset.load();
+
+        expect(dataset.rowCount).toBe(4);
+
+        let cnt = 0;
+        for (let row of dataset.navigator()) {
+            expect((row.getField(ID).value)).toBe(firstId + cnt++);
+        }
 
 });
 

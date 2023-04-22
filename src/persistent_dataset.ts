@@ -1,10 +1,11 @@
 import {
     DataPump,
-    Dataset, FieldDescriptors,
+    Dataset, DatasetRow, FieldDescriptors,
     ObjectArrayDataPump, PersistentDataPump
 } from "./dataset";
 import * as fs from "fs";
 import * as path from "path";
+import {v4 as uuidv4} from 'uuid';
 
 export enum Comparator {
     EQ,
@@ -14,6 +15,56 @@ export enum Comparator {
     EGT,
     LIKE
 
+}
+
+/**
+ * PersistenceMode determines whether only modified fields and rows are written back to the database, or all fields are written back.
+ */
+export enum PersistenceMode {
+
+    // Rows with modified fields are updated, and only the modified fields are written back
+    BY_FIELD,
+
+    // Rows with modified fields are updated, and all fields are written back
+    BY_ROW,
+
+    // All rows are updated and/or inserted, and all fields are written back
+    BY_DATASET
+}
+
+/**
+ * ReactiveWriteMode determines whether a field change will trigger a write to the database.
+ */
+export enum ReactiveWriteMode {
+    DISABLED    = 0,   // Reactive writes are disabled
+    ENABLED     = 1,   // Reactive writes are enabled
+}
+
+/**
+ * DB_AUTO_KEY determines whether the database will generate a key for a new row.
+ * If DB_AUTO_KEY is TRUE, it's expected that the database will generate a key for a new row.
+ */
+export enum DB_AUTO_KEY {
+    FALSE,
+    TRUE
+}
+
+/**
+ * SaveMode determines whether a save operation will overwrite existing data, or will fail if the data has been modified since it was loaded.
+ */
+export enum SaveMode {
+    OVERWRITE,
+    OPTIMISTIC
+}
+
+export interface AutoKeyFactory {
+    newKey() : string;
+}
+
+export class UUIDAutoKeyFactory implements AutoKeyFactory {
+    newKey(): string {
+        return uuidv4();
+    }
 }
 
 /**
@@ -39,19 +90,25 @@ export class PersistentDataset extends Dataset {
  */
 export class KeyedPersistentDataset extends PersistentDataset {
 
+    // Default key factory and auto key setting
+    private keyFactory : AutoKeyFactory = new UUIDAutoKeyFactory();
+    private dbAutoKeySetting : DB_AUTO_KEY = DB_AUTO_KEY.TRUE;
+
     constructor(
         fieldDescriptors: FieldDescriptors,
         protected readonly persistentDataPump: PersistentDataPump<KeyedPersistentDataset>,
-        private readonly tableSource? : {
+        private readonly tableSource : {
             tableName : string,
             keys : string[]
-        }) {
+        },  dbAutoKeySetting? : DB_AUTO_KEY ) {
 
         super(fieldDescriptors, persistentDataPump);
 
+        if (dbAutoKeySetting != undefined) this.dbAutoKeySetting = dbAutoKeySetting;
+
         if (tableSource == null || tableSource == undefined) return;
 
-        // keys must be one of the fields
+        // keys must be at least one of the fields of the dataset
         let foundKey = false;
         let badKey = "";
         for (let key of tableSource.keys){
@@ -72,8 +129,24 @@ export class KeyedPersistentDataset extends PersistentDataset {
 
     }
 
+    public get dbAutoKey() : DB_AUTO_KEY {
+        return this.dbAutoKeySetting;
+    }
+
     public get source() : { tableName: string, keys : string[] } {
         return this.tableSource;
+    }
+
+    public addRow(row?: DatasetRow): DatasetRow {
+        let newRow = super.addRow(row);
+
+        // If the database is not generating the keys, then generate keys for the row
+        if (this.dbAutoKeySetting == DB_AUTO_KEY.FALSE) {
+            this.source.keys.forEach( (key) => {
+                newRow[key] = this.keyFactory.newKey();
+            });
+        }
+        return newRow;
     }
 
 }
