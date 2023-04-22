@@ -429,10 +429,9 @@ export class TypedField implements Field {
 
     public readonly id: string = uuidv4();
     private readonly subject: Subject<DatasetEvent<Field, Field>> = new Subject<DatasetEvent<Field, Field>>();
-    private initialValue: string;
 
 
-    constructor(public readonly name: string, private fieldValue: string, public readonly type: FieldType) {
+    constructor(public readonly name: string, private fieldValue: string, public readonly type: FieldType, private isModified? : boolean) {
     }
 
     get value(): string {
@@ -440,18 +439,18 @@ export class TypedField implements Field {
     }
 
     set value(value: string) {
-        this.initialValue = this.fieldValue;
         this.fieldValue = value;
+        this.isModified = true;
 
         this.subject.next(new DatasetEvent<Field, Field>(this.id, this, this, DatasetEventType.FIELD_VALUE_UPDATED));
     }
 
     public get modified() {
-        return !(this.fieldValue === this.initialValue);
+        return this.isModified;
     }
 
     public resetModified(): void {
-        this.initialValue = this.fieldValue;
+        this.isModified = false;
     }
 
     public subscribe(observer: (e: DatasetEvent<Field, Field>) => void): Subscription {
@@ -498,7 +497,7 @@ export class DatasetRow implements DataRow {
     private readonly subject: Subject<DatasetEvent<DatasetRow, Field>> = new Subject<DatasetEvent<DatasetRow, Field>>();
     private fieldDescriptors: Map<string, FieldDescriptor> = new Map<string, FieldDescriptor>();
     private datasetFieldMap: Map<string, TypedField> = new Map<string, TypedField>();
-    private modifiedFlag: boolean = false;
+    //private modifiedFlag: boolean = false;
 
     constructor(fieldDescriptors?: FieldDescriptor[]) {
         this.id = uuidv4();
@@ -512,9 +511,7 @@ export class DatasetRow implements DataRow {
     }
 
     public get modified(): boolean {
-        if (this.modifiedFlag) {
-            return true;
-        }
+
 
         let tmpModified = false;
         this.datasetFieldMap.forEach((value: TypedField, key: string) => {
@@ -524,8 +521,7 @@ export class DatasetRow implements DataRow {
             }
         });
 
-        this.modifiedFlag = tmpModified;
-        return this.modifiedFlag;
+        return tmpModified;
     }
 
     get typeHash(): number {
@@ -571,7 +567,6 @@ export class DatasetRow implements DataRow {
         }
 
         tf.value = value;
-        this.modifiedFlag = true;
     }
 
     /**
@@ -603,7 +598,6 @@ export class DatasetRow implements DataRow {
     }
 
     public resetModified(): void {
-        this.modifiedFlag = false;
         this.datasetFieldMap.forEach((value: TypedField, key: string) => {
             value.resetModified();
         });
@@ -614,6 +608,8 @@ export class DatasetRow implements DataRow {
         let thisRow = this;
         let tf = new TypedField(value.name, "", value.type);
 
+        this.datasetFieldMap.set(value.name, tf);
+
         // Make the row an observer of the field, and fire an event if the field value changes.
         tf.subscribe((v: DatasetEvent<Field, Field>) => {
 
@@ -622,7 +618,6 @@ export class DatasetRow implements DataRow {
             );
         });
 
-        this.datasetFieldMap.set(value.name, tf);
         return tf;
     }
 
@@ -864,7 +859,7 @@ export class Dataset implements DataRow {
         this.navigator().last();
 
         // Make the dataset an observer of the row, and fire an event if there is a change to the row
-        row.subscribe((v) => {
+        row.subscribe( (v) => {
 
             if (this.quiet) return;
 

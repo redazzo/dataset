@@ -294,6 +294,9 @@ test("Add Row", async () => {
 
         let newRow = dataset.addRow();
 
+    // Wait for database to be updated
+    await sleep(1000);
+
         newRow.setFieldValue(MAKE, "LALALAND");
         newRow.setFieldValue(MODEL, "LALALAND");
         newRow.setFieldValue(YEAR, "1965");

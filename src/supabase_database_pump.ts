@@ -160,6 +160,13 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
                 // Note this only works if the  database generates the key, and there are no fields that are defined as NOT NULL in the DB
                 if (outerThis.Persistence_Mode == PersistenceMode.BY_FIELD && outerThis.Reactive_Write_Mode == ReactiveWriteMode.ENABLED) {
                     const {data, status, statusText} = await outerThis.insert(this);
+
+                    // Update the key field with the value returned from the DB
+                    if (outerThis.Auto_Key == DB_AUTO_KEY.TRUE) {
+                        this.keys.forEach((key) => {
+                            affectedRow.setFieldValue(key, data[0][key].toString());
+                        });
+                    }
                     console.log("Inserted " + JSON.stringify(data) + ": STATUS - " + status);
                 }
                 affectedRow.resetModified();
@@ -258,6 +265,8 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
 
                 let updateQuery = t.supabaseClient.from(this.theTableName).insert(fields).select();
 
+                this.resetModified(currentRow);
+
                 return updateQuery;
 
             }
@@ -287,6 +296,8 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
                 }
 
                 updateQuery = updateQuery.select();
+
+                this.resetModified(currentRow);
 
                 return updateQuery;
 
@@ -332,6 +343,12 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
             }
         }
         return queryFields;
+    }
+
+    private resetModified(currentRow: DatasetRow) {
+        for (let field of currentRow.entries()) {
+            field.resetModified();
+        }
     }
 
 //
