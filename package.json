@@ -1,6 +1,6 @@
 {
   "name": "@redazzo/dataset",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "",
   "main": "dist/dataset.js",
   "types": "dist/dataset.d.ts",
