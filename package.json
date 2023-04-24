@@ -1,6 +1,6 @@
 {
   "name": "@redazzo/dataset",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "",
   "main": "dist/dataset.js",
   "types": "dist/dataset.d.ts",
@@ -26,6 +26,7 @@
     "@supabase/supabase-js": "^2.21.0",
     "async-mutex": "^0.4.0",
     "rxjs": "^7.6.0",
-    "uuid": "^9.0.0"
+    "uuid": "^9.0.0",
+    "fs.realpath": "^1.0.0"
   }
 }
