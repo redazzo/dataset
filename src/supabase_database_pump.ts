@@ -28,6 +28,8 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
     private dataSet: Dataset;
     private keys: string[];
     private theTableName: string;
+    private filter = new Map<string, any>();
+
     private selectFunction: (pump: SupabaseDataPump) => Promise<{ data, count, error? }>;
     private updateFunction: (pump: SupabaseDataPump) => Promise<{ data, status, statusText }>;
     private deleteFunction: (pump: SupabaseDataPump) => Promise<{ data, status, statusText }>;
@@ -46,6 +48,11 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
 
     public get supabaseClient() {
         return this.theSupabaseClient;
+    }
+
+    public setLoadFilter(filter: Map<string, any>) {
+        // TODO: test to ensure that the filter is valid
+        this.filter = filter;
     }
 
     public set select(selectFunction: (t: SupabaseDataPump) => Promise<{ data, count, error? }>) {
@@ -330,14 +337,36 @@ export class SupabaseDataPump implements PersistentDataPump<KeyedPersistentDatas
 
                 let selectedFields = aPump.buildSelectedFields();
 
-                let query = aPump.supabaseClient.from(this.theTableName).select(selectedFields, {count: 'exact'});
+                let filter = this.buildFilter();
 
+                let query = null;
+
+                if (filter != null){
+                    query = aPump.supabaseClient.from(this.theTableName).select(selectedFields, {count: 'exact'}).match(filter);
+                } else {
+                    query = aPump.supabaseClient.from(this.theTableName).select(selectedFields, {count: 'exact'});
+                }
                 // TODO Support paging
 
                 return query;
             }
 
         }
+    }
+
+    private buildFilter() : {} {
+        if (this.filter.size == 0) {
+            return null;
+        }
+
+        let filter = {};
+
+        for (let item of this.filter) {
+            filter[item[0]] = item[1];
+        }
+
+        console.log(JSON.stringify(filter));
+        return filter;
     }
 
     private buildQueryFields(currentRow: DatasetRow) {

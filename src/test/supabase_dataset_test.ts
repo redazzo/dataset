@@ -298,6 +298,23 @@ test("Add Row", async () => {
 
 });
 
+/**
+ * Test loading of a filtered dataset.
+ */
+test("Load Filtered Dataset", async () => {
+
+        let dataset = createDataset(ReactiveWriteMode.ENABLED);
+
+        let filter = new Map([[MAKE, "Ford"]]);
+        dataset.setLoadFilter(filter);
+
+        await dataset.load();
+
+        expect(dataset.rowCount).toBe(1);
+        expect((dataset.getCurrentRow().getField(MAKE).value)).toBe("Ford");
+
+});
+
 class Waiter {
     private timeout: any
 

@@ -83,6 +83,10 @@ export class PersistentDataset extends Dataset {
     public async save() {
          await this.persistentDataPump.save(this);
     }
+
+    public setLoadFilter(filter: Map<string, any>) {
+        this.persistentDataPump.setLoadFilter(filter);
+    }
 }
 
 /**
@@ -156,6 +160,8 @@ export class KeyedPersistentDataset extends PersistentDataset {
  */
 export class FilePersistentDataPump<T extends PersistentDataset> extends ObjectArrayDataPump implements PersistentDataPump<T> {
 
+    private loadFilter : Map<string, any> = new Map<string, any>();
+
     constructor(private filePath : string){
         let data = FilePersistentDataPump.readFromFile(filePath);
         super(data);
@@ -179,5 +185,9 @@ export class FilePersistentDataPump<T extends PersistentDataset> extends ObjectA
             fs.writeFileSync(path.join(__dirname, this.filePath), json);
             fs.closeSync(fileDescriptorId);
         });
+    }
+
+    public setLoadFilter(filter: Map<string, any>) {
+        // TODO: Implement
     }
 }

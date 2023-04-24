@@ -1,11 +1,14 @@
 {
   "name": "@redazzo/dataset",
-  "version": "0.2.1",
+  "version": "0.2.3",
   "description": "",
   "main": "dist/dataset.js",
   "types": "dist/dataset.d.ts",
   "scripts": {
-    "test": "jest"
+    "build": "tsc",
+    "test": "jest",
+    "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix"
   },
   "keywords": [],
   "author": "",

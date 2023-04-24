@@ -105,6 +105,7 @@ export interface DataPump<T extends Dataset> {
 export interface PersistentDataPump<T extends PersistentDataset> extends DataPump<PersistentDataset> {
 
     save(dataset: T): Promise<void>
+    setLoadFilter(filter: Map<string, any>)
 
 }
 
@@ -246,7 +247,7 @@ class DatasetRowNavigator implements NavigableIterator<DatasetRow> {
 
     public last(): IteratorResult<DatasetRow> {
 
-        let maxIndex = this.datasetRows.size - 1;
+        const maxIndex = this.datasetRows.size - 1;
 
         this.theCurrentRow = this.datasetRows.get(maxIndex);
 
@@ -296,8 +297,8 @@ class DatasetRowNavigator implements NavigableIterator<DatasetRow> {
         this.iterationIndex = index;
         this.theCurrentRow = this.datasetRows.get(this.iterationIndex);
 
-        let value = this.theCurrentRow;
-        let done = this.iterationIndex == this.datasetRows.size - 1;
+        const value = this.theCurrentRow;
+        const done = this.iterationIndex == this.datasetRows.size - 1;
 
         return {
             value: value,
@@ -329,10 +330,10 @@ class DatasetRowNavigator implements NavigableIterator<DatasetRow> {
 
         let firstResultRow: DatasetRow = null;
         let index = -1;
-        for (let value of this.datasetRows.entries()) {
+        for (const value of this.datasetRows.entries()) {
 
-            for (let key of keys.keys()) {
-                let row = value[1]
+            for (const key of keys.keys()) {
+                const row = value[1]
 
                 if (+row.getField(key).value != keys.get(key)) {
                     continue;
@@ -467,7 +468,7 @@ export function calculateTypeHash(descriptors: Map<string, FieldDescriptor>): nu
 
     let hash = 0;
 
-    for (let descriptor of descriptors.values()) {
+    for (const descriptor of descriptors.values()) {
         let name = descriptor.name + descriptor.type.toString();
         for (let i = 0; i < name.length; i++) {
 
@@ -515,7 +516,7 @@ export class DatasetRow implements DataRow {
 
 
         let tmpModified = false;
-        this.datasetFieldMap.forEach((value: TypedField, key: string) => {
+        this.datasetFieldMap.forEach((value: TypedField, _: string) => {
             if (value.modified) {
                 tmpModified = true;
                 return;
@@ -606,12 +607,13 @@ export class DatasetRow implements DataRow {
 
     private addField(value: FieldDescriptor): TypedField {
 
-        let thisRow = this;
+
         let tf = new TypedField(value.name, "", value.type);
 
         this.datasetFieldMap.set(value.name, tf);
 
         // Make the row an observer of the field, and fire an event if the field value changes.
+        const thisRow = this;
         tf.subscribe((v: DatasetEvent<Field, Field>) => {
 
             thisRow.subject.next(
@@ -661,7 +663,7 @@ export class Dataset implements DataRow {
     private theRows: Map<number, DatasetRow> = new Map<number, DatasetRow>();
     private readonly datasetId: string;
     private readonly typeHash: number;
-    private isQuiet: boolean = false;
+    private isQuiet = false;
     private modifiedFlag: boolean = false;
 
     private theNavigator: DatasetRowNavigator = null;
@@ -682,7 +684,7 @@ export class Dataset implements DataRow {
         if (rows != null) {
 
             let noRows = 0;
-            for (let row of rows) {
+            for (const row of rows) {
 
                 if (row.typeHash != this.typeHash) {
                     throw new Error("Rows in a dataset must have identical fields and field types.");
@@ -695,7 +697,7 @@ export class Dataset implements DataRow {
 
     private populateTheFieldDescriptorsMap(fieldDescriptors: { name: string; type: FieldType }[]): Map<string, FieldDescriptor> {
         let fieldDescMap = new Map<string, FieldDescriptor>();
-        for (let descriptor of fieldDescriptors) {
+        for (const descriptor of fieldDescriptors) {
 
             fieldDescMap.set(descriptor.name, descriptor);
         }
@@ -731,7 +733,7 @@ export class Dataset implements DataRow {
 
         let descriptors = new Map<string, FieldDescriptor>();
 
-        for (let aDescriptor of this.fieldDescriptorsMap.values()) {
+        for (const aDescriptor of this.fieldDescriptorsMap.values()) {
 
             descriptors.set(aDescriptor.name, aDescriptor);
         }
@@ -747,13 +749,13 @@ export class Dataset implements DataRow {
         return this.theRows.size;
     }
 
-    public get json_d(): {} {
+    public get json_d(): object {
 
         let data = [];
-        for (let row of this.iterator()) {
+        for (const row of this.iterator()) {
 
             let ro = {}
-            for (let field of row.entries()) {
+            for (const field of row.entries()) {
                 ro[field.name] = field.value;
             }
 
@@ -814,7 +816,7 @@ export class Dataset implements DataRow {
             return this.theRows.get(rowId);
         }
 
-        for (let row of this.theRows.values()) {
+        for (const row of this.theRows.values()) {
 
             if (row.id === rowId) {
                 return row;
@@ -832,7 +834,7 @@ export class Dataset implements DataRow {
 
         let rowIds = new Array<string>();
 
-        for (let row of this.theRows.values()) {
+        for (const row of this.theRows.values()) {
             rowIds.push(row.id);
         }
 
@@ -841,12 +843,10 @@ export class Dataset implements DataRow {
 
     public addRow(row?: DatasetRow): DatasetRow {
 
-        let datasetThis = this;
-
         if (row == null || row == undefined) {
 
             let fieldDescriptorsTmp = new Array<DefaultFieldDescriptor>();
-            for (let value of this.fieldDescriptorsMap.values()) {
+            for (const value of this.fieldDescriptorsMap.values()) {
 
                 fieldDescriptorsTmp.push(value);
 
@@ -860,11 +860,12 @@ export class Dataset implements DataRow {
         this.navigator().last();
 
         // Make the dataset an observer of the row, and fire an event if there is a change to the row
+        const thisDataset = this;
         row.subscribe( (v) => {
 
             if (this.quiet) return;
 
-            datasetThis.subject.next(new DatasetEvent<Dataset, DatasetRow>(datasetThis.datasetId, row, datasetThis, DatasetEventType.ROW_UPDATED));
+            thisDataset.subject.next(new DatasetEvent<Dataset, DatasetRow>(thisDataset.datasetId, row, thisDataset, DatasetEventType.ROW_UPDATED));
         });
         if (!this.quiet) this.subject.next(new DatasetEvent<Dataset, DatasetRow>(this.datasetId, row, this, DatasetEventType.ROW_INSERTED));
         return row;
@@ -887,7 +888,7 @@ export class Dataset implements DataRow {
 
         } else {
 
-            for (let aKey of this.theRows.keys()) {
+            for (const aKey of this.theRows.keys()) {
 
                 let aRow = this.theRows.get(aKey);
 
@@ -961,17 +962,17 @@ export class Dataset implements DataRow {
 export class ObjectArrayDataPump implements DataPump<Dataset> {
 
 
-    constructor(protected data: {}[]) {
+    constructor(protected data: object[]) {
     }
 
     public load(dataset: Dataset): Promise<LoadStatus> {
 
         return new Promise((resolve, reject) => {
-            for (let rowValues of this.data) {
+            for (const rowValues of this.data) {
 
                 let row = new DatasetRow();
                 let fieldDescriptors = dataset.fieldDescriptors;
-                for (let entry of fieldDescriptors.values()) {
+                for (const entry of fieldDescriptors.values()) {
 
                     row.addColumn(entry.name, entry.type);
                 }
@@ -979,7 +980,7 @@ export class ObjectArrayDataPump implements DataPump<Dataset> {
                 // Seems a bit dirty
                 let mp: Map<string, string> = new Map<string, string>(Object.entries(rowValues));
 
-                for (let key of mp.keys()) {
+                for (const key of mp.keys()) {
                     row.setFieldValue(key, mp.get(key));
                 }
 
